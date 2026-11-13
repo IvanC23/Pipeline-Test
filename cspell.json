@@ -1,13 +1,16 @@
 {
   "version": "0.2",
-  "language": "en",
+  "language": "en,it",
   "import": [
     "https://cdn.jsdelivr.net/npm/@cspell/dict-it-it/cspell-ext.json",
     "https://cdn.jsdelivr.net/npm/@cspell/dict-fr-fr/cspell-ext.json",
     "https://cdn.jsdelivr.net/npm/@cspell/dict-es-es/cspell-ext.json"
   ],
+  "ignorePaths": [
+    "Library/**", "Temp/**", "Logs/**", "Packages/**", "ProjectSettings/**",
+    "**/*.meta", "**/*.unity", "**/*.prefab", "**/*.asset"
+  ],
   "overrides": [
-    { "filename": "**/*_it.*", "language": "en,it" },
     { "filename": "**/*_fr.*", "language": "en,fr" },
     { "filename": "**/*_es.*", "language": "en,es" }
   ],
