@@ -10,5 +10,6 @@
     { "filename": "**/*_it.*", "language": "en,it" },
     { "filename": "**/*_fr.*", "language": "en,fr" },
     { "filename": "**/*_es.*", "language": "en,es" }
-  ]
+  ],
+  "words": ["Behaviour"]
 }
