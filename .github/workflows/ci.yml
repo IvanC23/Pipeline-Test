@@ -1,0 +1,17 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [test]        # branch di DESTINAZIONE della PR
+
+jobs:
+  required-checks-for-promotion:              # questo nome diventerà il "required check": sceglilo stabile
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout del codice
+        uses: actions/checkout@v4
+
+      - name: Info sulla PR
+        run: |
+          echo "PR da ${{ github.head_ref }} verso ${{ github.base_ref }}"
+          ls -la
