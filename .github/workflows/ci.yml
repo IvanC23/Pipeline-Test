@@ -1,0 +1,21 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [test]
+
+jobs:
+  smoke-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: echo "PR da ${{ github.head_ref }} verso ${{ github.base_ref }}"
+
+  spellcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: streetsidesoftware/cspell-action@v8
+        with:
+          files: "**/*.{md,txt,cs}"
+          incremental_files_only: false
