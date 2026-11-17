@@ -1,0 +1,6 @@
+# Code owners for the whole repository.
+# The ruleset on main requires a review from a code owner, and the author of
+# a pull request cannot approve it: a promotion opened by one owner must be
+# approved by the other one.
+# GitHub reads this file from the base branch of each pull request.
+* @IvanC23 @IvanCrusco
