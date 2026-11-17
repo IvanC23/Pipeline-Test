@@ -4,9 +4,11 @@ on:
   # Direct pushes to development: informative, non-blocking checks.
   push:
     branches: [development]
-  # Pull requests towards test: the checks that will become required.
+  # Pull requests towards test and main: required checks on both promotions.
+  # Job names are the names of the required checks in the rulesets:
+  # keep them stable.
   pull_request:
-    branches: [test]
+    branches: [test, main]
 
 # Least privilege by default: jobs can only read the repository.
 permissions:
