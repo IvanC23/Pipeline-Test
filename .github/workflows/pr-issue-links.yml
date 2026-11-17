@@ -1,0 +1,52 @@
+name: PR issue links
+
+on:
+  pull_request:
+    branches: [test]
+    # "edited" re-runs the check when the title or description changes,
+    # without re-running the whole CI.
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+
+jobs:
+  issue-links:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check that the pull request references existing issues
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          # Title and body are user input: read them from env, never inline.
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          refs=$(printf '%s\n%s\n' "$PR_TITLE" "$PR_BODY" | grep -oE '#[0-9]+' | tr -d '#' | sort -un || true)
+
+          if [ -z "$refs" ]; then
+            echo "::error title=No issue reference::List the issues of this change in the description (e.g. Refs #12, Fixes #12)."
+            echo "### No issue reference found" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+          valid=0
+          echo "### Issues referenced by this pull request" >> "$GITHUB_STEP_SUMMARY"
+          for n in $refs; do
+            # The issues endpoint also returns pull requests: keep real issues only.
+            kind=$(gh api "repos/$REPO/issues/$n" --jq 'if .pull_request then "pull request" else "issue" end' 2>/dev/null || echo "missing")
+            if [ "$kind" = "issue" ]; then
+              valid=$((valid + 1))
+              echo "- #$n" >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "::warning title=Invalid reference::#$n is not an issue of this repository ($kind)."
+              echo "- #$n ignored: $kind" >> "$GITHUB_STEP_SUMMARY"
+            fi
+          done
+
+          if [ "$valid" -eq 0 ]; then
+            echo "::error title=No valid issue reference::None of the references points to an existing issue."
+            exit 1
+          fi

@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  # Direct pushes to development: informative, non-blocking checks.
+  push:
+    branches: [development]
+  # Pull requests towards test and main: required checks on both promotions.
+  # Job names are the names of the required checks in the rulesets:
+  # keep them stable.
+  pull_request:
+    branches: [test, main]
+
+# Least privilege by default: jobs can only read the repository.
+permissions:
+  contents: read
+
+jobs:
+  smoke-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      # Event data is passed through env, never interpolated into the script,
+      # so a crafted branch name cannot inject shell commands.
+      - name: Show event context
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+          HEAD_REF: ${{ github.head_ref }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            echo "Pull request from $HEAD_REF to $BASE_REF"
+          else
+            echo "Push to $REF_NAME"
+          fi
+
+  spellcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: streetsidesoftware/cspell-action@v8
+        with:
+          files: "**/*.{md,txt,cs}"
+          incremental_files_only: false

@@ -1,0 +1,50 @@
+name: Sync development
+
+on:
+  # Every merge into test is a push to test.
+  push:
+    branches: [test]
+  # Manual retry from the Actions tab, after a divergence has been resolved.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Never run two synchronisations at the same time.
+concurrency:
+  group: sync-development
+  cancel-in-progress: false
+
+jobs:
+  fast-forward:
+    runs-on: ubuntu-latest
+    # Write access only for this job: it must push to development.
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: development
+          fetch-depth: 0
+
+      - name: Fast-forward development to test
+        run: |
+          git fetch origin test
+          if git merge --ff-only origin/test; then
+            git push origin HEAD:development
+            echo "development fast-forwarded to \`$(git rev-parse --short HEAD)\`." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::error title=Fast-forward not possible::development has commits that are not in test. development was left unchanged: open a new pull request from development to test."
+            {
+              echo "### Fast-forward not possible"
+              echo "development was left unchanged. Commits in development but not in test:"
+              echo '```'
+              git log --oneline origin/test..HEAD
+              echo '```'
+              echo "Commits in test but not in development:"
+              echo '```'
+              git log --oneline HEAD..origin/test
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
