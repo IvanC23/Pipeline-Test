@@ -1,0 +1,1 @@
+Star Collector is a small arcade sandbox used to practice CI/CD with GitHub Actions.
