@@ -112,13 +112,19 @@ jobs:
 
       # The editor version is read from ProjectSettings/ProjectVersion.txt.
       # License and account come from the repository secrets.
-      - uses: game-ci/unity-test-runner@v4
+      # Exact versions: since v4.4.0 the action downloads the game-ci CLI and,
+      # with cliVersion "latest", asks the GitHub API for its newest release
+      # without a token. The unauthenticated limit is shared by every job on
+      # the runner IP and can fail the step with HTTP 403. A pinned CLI skips
+      # that call and keeps runs reproducible; update both versions on purpose.
+      - uses: game-ci/unity-test-runner@v4.4.0
         id: tests
         env:
           UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
           UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
           UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
         with:
+          cliVersion: v0.1.76
           # PlayMode is added with the first PlayMode test.
           testMode: EditMode
           artifactsPath: test-results
