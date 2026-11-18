@@ -1,5 +1,8 @@
 ﻿<Solution>
   <Project Path="StarCollector.Tests.PlayMode.csproj" />
+  <Project Path="StarCollector.Online.csproj" />
+  <Project Path="StarCollector.InputConversion.csproj" />
   <Project Path="StarCollector.Tests.EditMode.csproj" />
-  <Project Path="Assembly-CSharp.csproj" />
+  <Project Path="StarCollector.Scoring.csproj" />
+  <Project Path="StarCollector.Character.csproj" />
 </Solution>
