@@ -14,14 +14,14 @@ namespace StarCollector.Tests.EditMode.Scoring
         }
 
         [Test]
-        [Category("FUNC-02")]
+        [Property("Requirement", "FUNC-02")]
         public void NewAdapter_StartsAtBaseValues()
         {
             AssertValues(DifficultyAdapter.BaseTargetDistance, DifficultyAdapter.BaseAccuracyThreshold);
         }
 
         [Test]
-        [Category("FUNC-02")]
+        [Property("Requirement", "FUNC-02")]
         public void ConsecutiveMisses_BelowLimit_DoNotChangeDifficulty()
         {
             Repeat(adapter.RecordMiss, DifficultyAdapter.MissesBeforeEasing - 1);
@@ -30,7 +30,7 @@ namespace StarCollector.Tests.EditMode.Scoring
         }
 
         [Test]
-        [Category("FUNC-02")]
+        [Property("Requirement", "FUNC-02")]
         public void ConsecutiveMisses_AtLimit_EaseByOneStep()
         {
             Repeat(adapter.RecordMiss, DifficultyAdapter.MissesBeforeEasing);
@@ -39,7 +39,7 @@ namespace StarCollector.Tests.EditMode.Scoring
         }
 
         [Test]
-        [Category("FUNC-02")]
+        [Property("Requirement", "FUNC-02")]
         public void Hit_ResetsTheMissCount()
         {
             adapter.RecordMiss();
@@ -52,7 +52,7 @@ namespace StarCollector.Tests.EditMode.Scoring
         }
 
         [Test]
-        [Category("FUNC-02")]
+        [Property("Requirement", "FUNC-02")]
         public void ConsecutiveHits_AfterEasing_HardenByOneStep()
         {
             Repeat(adapter.RecordMiss, DifficultyAdapter.MissesBeforeEasing);
@@ -65,7 +65,7 @@ namespace StarCollector.Tests.EditMode.Scoring
         }
 
         [Test]
-        [Category("FUNC-02")]
+        [Property("Requirement", "FUNC-02")]
         public void Reset_RestoresBaseValues()
         {
             Repeat(adapter.RecordMiss, DifficultyAdapter.MissesBeforeEasing * 2);
@@ -76,7 +76,7 @@ namespace StarCollector.Tests.EditMode.Scoring
         }
 
         [Test]
-        [Category("RISK-01")]
+        [Property("Requirement", "RISK-01")]
         public void ManyMisses_NeverGoBelowMinimums()
         {
             Repeat(adapter.RecordMiss, DifficultyAdapter.MissesBeforeEasing * 20);
@@ -85,7 +85,7 @@ namespace StarCollector.Tests.EditMode.Scoring
         }
 
         [Test]
-        [Category("RISK-01")]
+        [Property("Requirement", "RISK-01")]
         public void ManyHits_NeverGoAboveBaseValues()
         {
             Repeat(adapter.RecordHit, DifficultyAdapter.HitsBeforeHardening * 20);
@@ -94,7 +94,7 @@ namespace StarCollector.Tests.EditMode.Scoring
         }
 
         [Test]
-        [Category("RISK-01")]
+        [Property("Requirement", "RISK-01")]
         public void AlternatingSeries_StayWithinLimits()
         {
             for (var round = 0; round < 10; round++)

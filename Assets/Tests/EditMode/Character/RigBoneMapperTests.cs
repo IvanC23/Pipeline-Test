@@ -10,7 +10,7 @@ namespace StarCollector.Tests.EditMode.Character
         private static readonly string[] CompleteRig = { "Root", "Hips", "Spine", "Neck", "Head", "LeftHand", "RightHand" };
 
         [Test]
-        [Category("FUNC-03")]
+        [Property("Requirement", "FUNC-03")]
         public void Map_AllDefaultBonesPresent_MapsEveryRole()
         {
             var result = new RigBoneMapper().Map(CompleteRig);
@@ -22,7 +22,7 @@ namespace StarCollector.Tests.EditMode.Character
         }
 
         [Test]
-        [Category("FUNC-03")]
+        [Property("Requirement", "FUNC-03")]
         public void Map_NamesDifferInCase_MapsWithTheRigSpelling()
         {
             var result = new RigBoneMapper().Map(new[] { "hips", "SPINE", "head", "leftHand", "rightHAND" });
@@ -33,7 +33,7 @@ namespace StarCollector.Tests.EditMode.Character
         }
 
         [Test]
-        [Category("FUNC-03")]
+        [Property("Requirement", "FUNC-03")]
         public void Map_SameNameTwice_FirstOccurrenceWins()
         {
             var result = new RigBoneMapper().Map(new[] { "Hips", "Spine", "Head", "HEAD", "LeftHand", "RightHand" });
@@ -42,7 +42,7 @@ namespace StarCollector.Tests.EditMode.Character
         }
 
         [Test]
-        [Category("FUNC-03")]
+        [Property("Requirement", "FUNC-03")]
         public void Map_CustomNames_UsesTheGivenNames()
         {
             var mapper = new RigBoneMapper(new Dictionary<BoneRole, string>
@@ -59,7 +59,7 @@ namespace StarCollector.Tests.EditMode.Character
         }
 
         [Test]
-        [Category("RISK-02")]
+        [Property("Requirement", "RISK-02")]
         public void Map_BoneMissing_ReportsTheRoleAndIncompleteRig()
         {
             var result = new RigBoneMapper().Map(new[] { "Hips", "Spine", "Head", "RightHand" });
@@ -70,7 +70,7 @@ namespace StarCollector.Tests.EditMode.Character
         }
 
         [Test]
-        [Category("RISK-02")]
+        [Property("Requirement", "RISK-02")]
         public void Map_EmptyRig_ReportsEveryRoleAsMissing()
         {
             var result = new RigBoneMapper().Map(new string[0]);
@@ -80,7 +80,7 @@ namespace StarCollector.Tests.EditMode.Character
         }
 
         [Test]
-        [Category("RISK-02")]
+        [Property("Requirement", "RISK-02")]
         public void Map_EmptyBoneNames_AreIgnored()
         {
             var result = new RigBoneMapper(new Dictionary<BoneRole, string> { [BoneRole.Head] = "Head" })
@@ -91,7 +91,7 @@ namespace StarCollector.Tests.EditMode.Character
         }
 
         [Test]
-        [Category("RISK-02")]
+        [Property("Requirement", "RISK-02")]
         public void Constructor_EmptyExpectedName_Throws([Values(null, "", "   ")] string boneName)
         {
             Assert.Throws<ArgumentException>(() =>
@@ -99,7 +99,7 @@ namespace StarCollector.Tests.EditMode.Character
         }
 
         [Test]
-        [Category("RISK-02")]
+        [Property("Requirement", "RISK-02")]
         public void NullArguments_Throw()
         {
             Assert.Throws<ArgumentNullException>(() => new RigBoneMapper(null));

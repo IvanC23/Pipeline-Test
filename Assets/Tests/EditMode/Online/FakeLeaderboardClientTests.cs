@@ -22,7 +22,7 @@ namespace StarCollector.Tests.EditMode.Online
         }
 
         [Test]
-        [Category("DATA-01")]
+        [Property("Requirement", "DATA-01")]
         public void Submit_StoredEntryHasTheSamePlayerMatchAndScore()
         {
             var sent = new ScoreEntry("player-001", "match-001", 1234);
@@ -37,7 +37,7 @@ namespace StarCollector.Tests.EditMode.Online
         }
 
         [Test]
-        [Category("DATA-01")]
+        [Property("Requirement", "DATA-01")]
         public void Submit_ReadBackEntryEqualsTheEntrySent()
         {
             var sent = new ScoreEntry("player-001", "match-001", 1234);
@@ -49,7 +49,7 @@ namespace StarCollector.Tests.EditMode.Online
         }
 
         [Test]
-        [Category("DATA-01")]
+        [Property("Requirement", "DATA-01")]
         public void ScoreEntry_InvalidValues_Throw()
         {
             Assert.Throws<ArgumentException>(() => new ScoreEntry(" ", "match-001", 10));
@@ -58,7 +58,7 @@ namespace StarCollector.Tests.EditMode.Online
         }
 
         [Test]
-        [Category("DATA-02")]
+        [Property("Requirement", "DATA-02")]
         public void Submit_SamePlayerAndMatchTwice_SecondIsRejected()
         {
             Submit(new ScoreEntry("player-001", "match-001", 100));
@@ -72,7 +72,7 @@ namespace StarCollector.Tests.EditMode.Online
         }
 
         [Test]
-        [Category("DATA-02")]
+        [Property("Requirement", "DATA-02")]
         public void Submit_SamePlayerInAnotherMatch_IsAccepted()
         {
             Submit(new ScoreEntry("player-001", "match-001", 100));
@@ -84,7 +84,7 @@ namespace StarCollector.Tests.EditMode.Online
         }
 
         [Test]
-        [Category("NET-01")]
+        [Property("Requirement", "NET-01")]
         public void GetTopScores_ReturnsHighestFirstAndAtMostCount()
         {
             Submit(new ScoreEntry("player-001", "match-001", 300));
@@ -97,7 +97,7 @@ namespace StarCollector.Tests.EditMode.Online
         }
 
         [Test]
-        [Category("NET-01")]
+        [Property("Requirement", "NET-01")]
         public void GetTopScores_EqualScores_KeepTheSubmissionOrder()
         {
             Submit(new ScoreEntry("player-001", "match-001", 500));
@@ -109,7 +109,7 @@ namespace StarCollector.Tests.EditMode.Online
         }
 
         [Test]
-        [Category("NET-01")]
+        [Property("Requirement", "NET-01")]
         public void GetTopScores_CountZeroOrEmptyLeaderboard_ReturnsEmpty()
         {
             Assert.That(TopScores(10), Is.Empty);
@@ -120,14 +120,14 @@ namespace StarCollector.Tests.EditMode.Online
         }
 
         [Test]
-        [Category("NET-01")]
+        [Property("Requirement", "NET-01")]
         public void GetTopScores_NegativeCount_Throws()
         {
             Assert.Throws<ArgumentOutOfRangeException>(() => client.GetTopScoresAsync(-1));
         }
 
         [Test]
-        [Category("NET-01")]
+        [Property("Requirement", "NET-01")]
         public void CancelledRequests_ThrowAndStoreNothing()
         {
             using (var cancellation = new CancellationTokenSource())

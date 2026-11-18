@@ -16,7 +16,7 @@ namespace StarCollector.Tests.EditMode.Scoring
         }
 
         [Test]
-        [Category("FUNC-01")]
+        [Property("Requirement", "FUNC-01")]
         public void Calculate_WithinTargetTimeAndFullAccuracy_ReturnsMaxPoints(
             [Values(0.0, 1.0, 2.0)] double elapsedSeconds)
         {
@@ -24,7 +24,7 @@ namespace StarCollector.Tests.EditMode.Scoring
         }
 
         [Test]
-        [Category("FUNC-01")]
+        [Property("Requirement", "FUNC-01")]
         public void Calculate_BetweenTargetAndMaxTime_DecreasesLinearly()
         {
             // Halfway between 2 s and 10 s the time factor is 0.5.
@@ -33,14 +33,14 @@ namespace StarCollector.Tests.EditMode.Scoring
         }
 
         [Test]
-        [Category("FUNC-01")]
+        [Property("Requirement", "FUNC-01")]
         public void Calculate_AtOrAfterMaxTime_ReturnsZero([Values(10.0, 15.0)] double elapsedSeconds)
         {
             Assert.That(calculator.Calculate(elapsedSeconds, 1.0), Is.EqualTo(0));
         }
 
         [Test]
-        [Category("FUNC-01")]
+        [Property("Requirement", "FUNC-01")]
         public void Calculate_ScalesWithAccuracy()
         {
             Assert.That(calculator.Calculate(1.0, 0.25), Is.EqualTo(250));
@@ -48,7 +48,7 @@ namespace StarCollector.Tests.EditMode.Scoring
         }
 
         [Test]
-        [Category("IO-01")]
+        [Property("Requirement", "IO-01")]
         public void Calculate_AccuracyLimits_AreAccepted()
         {
             Assert.That(calculator.Calculate(0.0, 0.0), Is.EqualTo(0));
@@ -59,7 +59,7 @@ namespace StarCollector.Tests.EditMode.Scoring
         [TestCase(1.01)]
         [TestCase(double.NaN)]
         [TestCase(double.PositiveInfinity)]
-        [Category("IO-01")]
+        [Property("Requirement", "IO-01")]
         public void Calculate_AccuracyOutOfRange_Throws(double accuracy)
         {
             Assert.Throws<ArgumentOutOfRangeException>(() => calculator.Calculate(1.0, accuracy));
@@ -68,7 +68,7 @@ namespace StarCollector.Tests.EditMode.Scoring
         [TestCase(-0.001)]
         [TestCase(double.NaN)]
         [TestCase(double.PositiveInfinity)]
-        [Category("IO-01")]
+        [Property("Requirement", "IO-01")]
         public void Calculate_InvalidElapsedTime_Throws(double elapsedSeconds)
         {
             Assert.Throws<ArgumentOutOfRangeException>(() => calculator.Calculate(elapsedSeconds, 1.0));
@@ -80,7 +80,7 @@ namespace StarCollector.Tests.EditMode.Scoring
         [TestCase(5.0, 4.0)]
         [TestCase(double.NaN, 10.0)]
         [TestCase(2.0, double.PositiveInfinity)]
-        [Category("IO-01")]
+        [Property("Requirement", "IO-01")]
         public void Constructor_InvalidTimes_Throws(double targetTimeSeconds, double maxTimeSeconds)
         {
             Assert.Throws<ArgumentOutOfRangeException>(() => new ScoreCalculator(targetTimeSeconds, maxTimeSeconds));

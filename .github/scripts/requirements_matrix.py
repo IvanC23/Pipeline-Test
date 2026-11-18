@@ -2,17 +2,21 @@
 
 Reads the requirements catalog and every NUnit 3 XML report under the results
 folder, then writes the matrix requirement -> tests -> outcome as Markdown
-and CSV. Tests declare the requirement they verify with [Category("ID")];
-a category set on a fixture applies to all of its tests.
+and CSV. Tests declare the requirement they verify with
+[Property("Requirement", "ID")]; a property set on a fixture applies to all
+of its tests. A test can verify more than one requirement.
+
+Not [Category("ID")]: the NUnit version used by Unity marks a test as not
+runnable when its category contains '-', and requirement ids do.
 
 Exit code 1 (traceability problem):
   - no XML report, or reports without tests (e.g. a compile error);
   - a requirement of the catalog with no test ("Not covered");
   - a requirement whose tests did not run ("Not verified": skipped,
     inconclusive).
-A failed test is shown as "Failed" but does not fail this script: the
-unity-tests job already fails on it.
-Categories that are not in the catalog are reported as warnings.
+A failed test is shown as "Failed", with its reason, but does not fail this
+script: the unity-tests job already fails on it.
+Requirement ids that are not in the catalog are reported as warnings.
 
 Only the Python standard library is used.
 """
@@ -25,10 +29,15 @@ import sys
 import xml.etree.ElementTree as ElementTree
 from pathlib import Path
 
+REQUIREMENT_PROPERTY = "Requirement"
+
 PASSED = "Passed"
 FAILED = "Failed"
 NOT_VERIFIED = "Not verified"
 NOT_COVERED = "Not covered"
+
+# Longest failure reason kept in the matrix; the full text is in the XML.
+MAX_REASON_LENGTH = 200
 
 
 def error(message):
@@ -49,31 +58,45 @@ def load_requirements(path):
     return requirements
 
 
-def categories_of(element):
+def requirements_of(element):
     properties = element.find("properties")
     if properties is None:
         return set()
     return {
-        prop.get("value")
+        prop.get("value").strip()
         for prop in properties.findall("property")
-        if prop.get("name") == "Category" and prop.get("value")
+        if prop.get("name") == REQUIREMENT_PROPERTY and prop.get("value", "").strip()
     }
 
 
-def collect_tests(element, inherited, report_name, tests):
-    """Walks the report; each test-case gets the categories of its suites."""
-    categories = inherited | categories_of(element)
+def reason_of(test_case):
+    """Label and first line of the failure or skip message, if any."""
+    message = test_case.findtext("failure/message") or test_case.findtext("reason/message") or ""
+    lines = [line.strip() for line in message.strip().splitlines() if line.strip()]
+    reason = lines[0] if lines else ""
+    label = test_case.get("label")
+    if label:
+        reason = f"{label}: {reason}" if reason else label
+    if len(reason) > MAX_REASON_LENGTH:
+        reason = reason[:MAX_REASON_LENGTH - 3] + "..."
+    return reason
+
+
+def collect_tests(element, inherited, tests):
+    """Walks the report; each test-case gets the requirements of its suites."""
+    requirements = inherited | requirements_of(element)
     if element.tag == "test-case":
+        result = element.get("result") or "Unknown"
         tests.append({
             "name": element.get("fullname") or element.get("name") or "?",
-            "result": element.get("result") or "Unknown",
-            "categories": categories,
-            "report": report_name,
+            "result": result,
+            "reason": "" if result == PASSED else reason_of(element),
+            "requirements": requirements,
         })
         return
     for child in element:
         if child.tag in ("test-suite", "test-case"):
-            collect_tests(child, categories, report_name, tests)
+            collect_tests(child, requirements, tests)
 
 
 def read_reports(results_dir):
@@ -84,7 +107,7 @@ def read_reports(results_dir):
             root = ElementTree.parse(report).getroot()
         except ElementTree.ParseError as exception:
             raise ValueError(f"Test report {report} is not valid XML: {exception}") from exception
-        collect_tests(root, set(), report.relative_to(results_dir).as_posix(), tests)
+        collect_tests(root, set(), tests)
     return reports, tests
 
 
@@ -99,7 +122,14 @@ def requirement_status(results):
 
 
 def markdown_cell(text):
-    return text.replace("|", "\\|")
+    return text.replace("|", "\\|").replace("\n", " ")
+
+
+def test_line(test):
+    line = f"- {test['result']}: `{test['name']}`"
+    if test["reason"]:
+        line += f" – {markdown_cell(test['reason'])}"
+    return line
 
 
 def write_outputs(output_dir, header, rows, unlinked, unknown):
@@ -107,12 +137,15 @@ def write_outputs(output_dir, header, rows, unlinked, unknown):
 
     with open(output_dir / "requirements-matrix.csv", "w", newline="", encoding="utf-8") as file:
         writer = csv.writer(file)
-        writer.writerow(["Requirement", "Title", "Status", "Test", "Test result"])
+        writer.writerow(["Requirement", "Title", "Status", "Test", "Test result", "Reason"])
         for requirement, status, tests in rows:
             if not tests:
-                writer.writerow([requirement["id"], requirement["title"], status, "", ""])
+                writer.writerow([requirement["id"], requirement["title"], status, "", "", ""])
             for test in tests:
-                writer.writerow([requirement["id"], requirement["title"], status, test["name"], test["result"]])
+                writer.writerow([
+                    requirement["id"], requirement["title"], status,
+                    test["name"], test["result"], test["reason"],
+                ])
 
     lines = ["# Requirements matrix", ""]
     lines += [f"- {label}: {value}" for label, value in header]
@@ -127,15 +160,14 @@ def write_outputs(output_dir, header, rows, unlinked, unknown):
         lines.append("")
         if not tests:
             lines.append("No tests.")
-        for test in tests:
-            lines.append(f"- {test['result']}: `{test['name']}`")
+        lines += [test_line(test) for test in tests]
         lines.append("")
     lines += ["## Tests not linked to a requirement", ""]
-    lines += [f"- {test['result']}: `{test['name']}`" for test in unlinked] or ["None."]
+    lines += [test_line(test) for test in unlinked] or ["None."]
     lines.append("")
     if unknown:
-        lines += ["## Categories not in the catalog", ""]
-        lines += [f"- `{category}`" for category in sorted(unknown)]
+        lines += ["## Requirement ids not in the catalog", ""]
+        lines += [f"- `{requirement_id}`" for requirement_id in sorted(unknown)]
         lines.append("")
 
     markdown = "\n".join(lines)
@@ -167,11 +199,11 @@ def main():
     known_ids = {requirement["id"] for requirement in requirements}
     rows = []
     for requirement in requirements:
-        linked = [test for test in tests if requirement["id"] in test["categories"]]
+        linked = [test for test in tests if requirement["id"] in test["requirements"]]
         rows.append((requirement, requirement_status([test["result"] for test in linked]), linked))
 
-    unlinked = [test for test in tests if not test["categories"]]
-    unknown = {category for test in tests for category in test["categories"]} - known_ids
+    unlinked = [test for test in tests if not test["requirements"]]
+    unknown = {requirement_id for test in tests for requirement_id in test["requirements"]} - known_ids
 
     header = [
         ("Commit", os.environ.get("HEAD_SHA") or os.environ.get("GITHUB_SHA") or "local"),
@@ -186,8 +218,8 @@ def main():
         with open(summary, "a", encoding="utf-8") as file:
             file.write(markdown + "\n")
 
-    for category in sorted(unknown):
-        warning(f"Category '{category}' is not a requirement of the catalog.")
+    for requirement_id in sorted(unknown):
+        warning(f"Requirement '{requirement_id}' used by a test is not in the catalog.")
 
     exit_code = 0
     for requirement, status, _ in rows:

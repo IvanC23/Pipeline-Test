@@ -18,7 +18,7 @@ namespace StarCollector.Tests.EditMode.InputConversion
         }
 
         [Test]
-        [Category("IO-02")]
+        [Property("Requirement", "IO-02")]
         public void Convert_StraightMovement_ReturnsUnitDirectionAndScaledSpeed()
         {
             // 5 units in 1 second: speed 5, a quarter of the maximum speed.
@@ -36,7 +36,7 @@ namespace StarCollector.Tests.EditMode.InputConversion
         }
 
         [Test]
-        [Category("IO-02")]
+        [Property("Requirement", "IO-02")]
         public void Convert_FasterThanMaxSpeed_ClampsSpeedToOne()
         {
             var result = converter.Convert(new[] { new InputSample(0, 0, 0), new InputSample(100, 0, 1) });
@@ -46,7 +46,7 @@ namespace StarCollector.Tests.EditMode.InputConversion
         }
 
         [Test]
-        [Category("IO-02")]
+        [Property("Requirement", "IO-02")]
         public void Convert_FewerThanTwoSamples_ReturnsNone()
         {
             AssertNone(converter.Convert(new InputSample[0]));
@@ -55,7 +55,7 @@ namespace StarCollector.Tests.EditMode.InputConversion
 
         [TestCase(0.0)]
         [TestCase(-0.5)]
-        [Category("IO-02")]
+        [Property("Requirement", "IO-02")]
         public void Convert_TimesNotIncreasing_ReturnsNone(double secondSampleTime)
         {
             AssertNone(converter.Convert(new[] { new InputSample(0, 0, 0), new InputSample(5, 0, secondSampleTime) }));
@@ -64,21 +64,21 @@ namespace StarCollector.Tests.EditMode.InputConversion
         [TestCase(double.NaN, 0.0, 1.0)]
         [TestCase(0.0, double.PositiveInfinity, 1.0)]
         [TestCase(5.0, 0.0, double.NaN)]
-        [Category("IO-02")]
+        [Property("Requirement", "IO-02")]
         public void Convert_ValueNotFinite_ReturnsNone(double x, double y, double timeSeconds)
         {
             AssertNone(converter.Convert(new[] { new InputSample(0, 0, 0), new InputSample(x, y, timeSeconds) }));
         }
 
         [Test]
-        [Category("IO-02")]
+        [Property("Requirement", "IO-02")]
         public void Convert_BelowMinSpeed_ReturnsNone()
         {
             AssertNone(converter.Convert(new[] { new InputSample(0, 0, 0), new InputSample(0.1, 0, 1) }));
         }
 
         [Test]
-        [Category("IO-02")]
+        [Property("Requirement", "IO-02")]
         public void Convert_NoDisplacement_ReturnsNoneEvenWithZeroMinSpeed()
         {
             var noMinimum = new InputSampleConverter(maxSpeed: 20.0, minSpeed: 0.0);
@@ -87,7 +87,7 @@ namespace StarCollector.Tests.EditMode.InputConversion
         }
 
         [Test]
-        [Category("IO-02")]
+        [Property("Requirement", "IO-02")]
         public void Convert_NullSamples_Throws()
         {
             Assert.Throws<ArgumentNullException>(() => converter.Convert(null));
@@ -100,7 +100,7 @@ namespace StarCollector.Tests.EditMode.InputConversion
         [TestCase(20.0, -1.0)]
         [TestCase(20.0, double.NaN)]
         [TestCase(20.0, 20.0)]
-        [Category("IO-02")]
+        [Property("Requirement", "IO-02")]
         public void Constructor_InvalidSpeeds_Throws(double maxSpeed, double minSpeed)
         {
             Assert.Throws<ArgumentOutOfRangeException>(() => new InputSampleConverter(maxSpeed, minSpeed));
