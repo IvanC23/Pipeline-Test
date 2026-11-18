@@ -125,8 +125,9 @@ jobs:
           UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
         with:
           cliVersion: v0.1.76
-          # PlayMode is added with the first PlayMode test.
-          testMode: EditMode
+          # All = EditMode and PlayMode (scene smoke tests), one folder per
+          # mode under artifactsPath. Standalone is not included.
+          testMode: All
           artifactsPath: test-results
           githubToken: ${{ secrets.GITHUB_TOKEN }}
           checkName: Unity test results
