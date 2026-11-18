@@ -46,6 +46,7 @@ namespace StarCollector.Tests.PlayMode
         }
 
         [UnityTest]
+        [Category("RISK-03")]
         public IEnumerator Scene_LoadsWithoutUnexpectedErrors([ValueSource(nameof(BuildSceneNames))] string sceneName)
         {
             // Expectations are declared before the code that logs them.

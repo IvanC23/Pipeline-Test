@@ -129,6 +129,10 @@ jobs:
           # mode under artifactsPath. Standalone is not included.
           testMode: All
           artifactsPath: test-results
+          # No code coverage for now: the coverage package is not installed,
+          # so the instrumentation only slows the tests down and produces
+          # nothing. The action documents crashes with it on in some setups.
+          coverageEnabled: false
           githubToken: ${{ secrets.GITHUB_TOKEN }}
           checkName: Unity test results
 
@@ -141,4 +145,49 @@ jobs:
           # Same folder as artifactsPath above; a fixed path also works when
           # the test step stops before setting its outputs.
           path: test-results
+          if-no-files-found: warn
+
+  # Traceability: builds the requirements matrix (requirement -> tests ->
+  # outcome) from the XML reports of unity-tests and the catalog in
+  # Requirements/requirements.json. Fails when a requirement has no tests,
+  # when its tests did not run, or when there is no report at all. A failed
+  # test is shown in the matrix; unity-tests already fails on it.
+  # A separate job, so it can be re-run alone without starting Unity again.
+  # Not a required check yet.
+  requirements-matrix:
+    needs: unity-tests
+    # Also after a failure of unity-tests: the matrix shows what failed, or
+    # reports the missing XML. Not when the run is cancelled.
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      # When unity-tests stops before writing any report, the artifact does
+      # not exist: the step is allowed to fail and the script reports the
+      # missing XML as the error.
+      - uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          name: unity-test-results
+          path: test-results
+
+      # Python 3 is preinstalled on the runner; the script uses only the
+      # standard library.
+      - name: Build the requirements matrix
+        env:
+          # On pull requests github.sha is a temporary merge commit: the
+          # matrix refers to the head commit of the branch instead.
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: >-
+          python3 .github/scripts/requirements_matrix.py
+          --requirements Requirements/requirements.json
+          --results test-results
+          --output requirements-matrix
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: requirements-matrix
+          path: requirements-matrix
           if-no-files-found: warn

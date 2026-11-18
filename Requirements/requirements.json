@@ -1,0 +1,49 @@
+{
+  "description": "Requirements verified by the automated tests. Each test declares the requirement it verifies with [Category(\"ID\")]. The requirements matrix starts from this list, so a requirement without tests is reported as not covered.",
+  "requirements": [
+    {
+      "id": "FUNC-01",
+      "title": "The points of a star are 1000 scaled by the time factor and by the accuracy."
+    },
+    {
+      "id": "FUNC-02",
+      "title": "After 3 consecutive missed stars the game gets easier by one step; after 5 consecutive collected stars it moves back by one step towards the base values."
+    },
+    {
+      "id": "FUNC-03",
+      "title": "The bones of the character rig are mapped to their roles by name, ignoring case."
+    },
+    {
+      "id": "IO-01",
+      "title": "Score inputs: elapsed time zero or more, accuracy from 0 to 1, values that are not finite numbers rejected."
+    },
+    {
+      "id": "IO-02",
+      "title": "Input conversion: unit direction, speed from 0 to 1, invalid samples produce no movement."
+    },
+    {
+      "id": "DATA-01",
+      "title": "The leaderboard stores the score with the same player, match and score as the entry sent."
+    },
+    {
+      "id": "DATA-02",
+      "title": "The leaderboard accepts one score per player and match."
+    },
+    {
+      "id": "NET-01",
+      "title": "The leaderboard returns the best scores highest first, at most the requested count, and honors cancellation."
+    },
+    {
+      "id": "RISK-01",
+      "title": "The difficulty never goes below the minimum values or above the base values."
+    },
+    {
+      "id": "RISK-02",
+      "title": "A bone missing from the character rig is reported and the rig is marked as incomplete."
+    },
+    {
+      "id": "RISK-03",
+      "title": "Loading a scene of the build does not log unexpected errors or exceptions."
+    }
+  ]
+}
