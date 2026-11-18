@@ -26,13 +26,22 @@ namespace StarCollector.Tests.PlayMode
             {
             };
 
+        // During a PlayMode run the Test Framework adds its own temporary
+        // scene to the Build Settings, named with this prefix and a new GUID
+        // on every run. It is not a project scene: it is skipped.
+        private const string TestFrameworkScenePrefix = "InitTestScene";
+
         // Read from the Build Settings, so a new scene is tested without
         // changing this file. Only enabled scenes are listed.
         private static IEnumerable<string> BuildSceneNames()
         {
             for (var index = 0; index < SceneManager.sceneCountInBuildSettings; index++)
             {
-                yield return Path.GetFileNameWithoutExtension(SceneUtility.GetScenePathByBuildIndex(index));
+                var sceneName = Path.GetFileNameWithoutExtension(SceneUtility.GetScenePathByBuildIndex(index));
+                if (!sceneName.StartsWith(TestFrameworkScenePrefix))
+                {
+                    yield return sceneName;
+                }
             }
         }
 
