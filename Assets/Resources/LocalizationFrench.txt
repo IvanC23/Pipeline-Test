@@ -1,0 +1,5 @@
+MenuPlay = Jouer
+MenuQuit = Quitter
+ScoreLabel = Score
+StarCollected = Étoile ramassée !
+GameOver = Partie terminée

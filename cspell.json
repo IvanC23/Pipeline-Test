@@ -1,18 +1,28 @@
 {
   "version": "0.2",
-  "language": "en,it",
+  "language": "en",
   "import": [
-    "https://cdn.jsdelivr.net/npm/@cspell/dict-it-it/cspell-ext.json",
-    "https://cdn.jsdelivr.net/npm/@cspell/dict-fr-fr/cspell-ext.json",
-    "https://cdn.jsdelivr.net/npm/@cspell/dict-es-es/cspell-ext.json"
+    "https://cdn.jsdelivr.net/npm/@cspell/dict-it-it@3.1.7/cspell-ext.json",
+    "https://cdn.jsdelivr.net/npm/@cspell/dict-fr-fr@2.3.2/cspell-ext.json",
+    "https://cdn.jsdelivr.net/npm/@cspell/dict-es-es@3.0.9/cspell-ext.json"
   ],
+  "dictionaryDefinitions": [
+    {
+      "name": "project-words",
+      "path": "./.cspell/project-words.txt",
+      "addWords": true
+    }
+  ],
+  "dictionaries": ["project-words"],
   "ignorePaths": [
     "Library/**", "Temp/**", "Logs/**", "Packages/**", "ProjectSettings/**",
-    "**/*.meta", "**/*.unity", "**/*.prefab", "**/*.asset"
+    "**/*.meta", "**/*.unity", "**/*.prefab", "**/*.asset",
+    ".cspell/**"
   ],
   "overrides": [
-    { "filename": "**/*_fr.*", "language": "en,fr" },
-    { "filename": "**/*_es.*", "language": "en,es" }
-  ],
-  "words": ["Behaviour"]
+    { "filename": "**/*.cs", "language": "en,it" },
+    { "filename": "**/*Italian.txt", "language": "en,it" },
+    { "filename": "**/*French.txt", "language": "en,fr" },
+    { "filename": "**/*Spanish.txt", "language": "en,es" }
+  ]
 }
