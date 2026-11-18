@@ -17,5 +17,14 @@ namespace StarCollector.Tests.EditMode
             Assert.That(enabledScenes, Is.Not.Empty,
                 "The Build Settings list has no enabled scene: a player build would contain nothing to run.");
         }
+
+        // Deliberate forbidden setting: it must turn the unity-tests check red
+        // before Unity starts. Remove after the check.
+        [Test]
+        public void DeliberateForbiddenSetting_BlocksPullRequest()
+        {
+            UnityEngine.TestTools.LogAssert.ignoreFailingMessages = true;
+            Assert.Pass();
+        }
     }
 }

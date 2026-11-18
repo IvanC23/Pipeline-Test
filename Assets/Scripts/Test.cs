@@ -2,8 +2,7 @@ using UnityEngine;
 
 public class Test : MonoBehaviour
 {
-    // Deliberate compile error (missing semicolon): it must turn the unity-tests check red.
-    int numeroPrimo = 0
+    int numeroPrimo = 0;
     float numberOfSeconds = 0.0f;
     // Start is called once before the first execution of Update after the MonoBehaviour is created
     void Start()
