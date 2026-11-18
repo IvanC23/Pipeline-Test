@@ -34,11 +34,33 @@ jobs:
             echo "Push to $REF_NAME"
           fi
 
+  # Blocking: a spelling error in C# code fails the job.
+  # Required check in the test and main rulesets: keep the job name.
   spellcheck:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: streetsidesoftware/cspell-action@v8
+      - uses: streetsidesoftware/cspell-action@v9
         with:
-          files: "**/*.{md,txt,cs}"
+          files: |
+            Assets/**/*.cs
+          # Check every file, not only the ones changed by the push or PR.
           incremental_files_only: false
+          strict: true
+          inline: error
+
+  # Informative: spelling errors in documentation and localization files are
+  # reported as warnings, the job stays green. Not a required check.
+  # Only the listed folders are checked, to skip unrelated .txt files.
+  spellcheck-docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: streetsidesoftware/cspell-action@v9
+        with:
+          files: |
+            *.md
+            Assets/Resources/**/*.txt
+          incremental_files_only: false
+          strict: false
+          inline: warning
