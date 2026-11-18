@@ -1,0 +1,14 @@
+{
+    "name": "StarCollector.InputConversion",
+    "rootNamespace": "StarCollector.InputConversion",
+    "references": [],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": true
+}
