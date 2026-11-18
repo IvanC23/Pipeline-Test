@@ -123,16 +123,19 @@ jobs:
           UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
           UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
           UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+          # No code coverage for now: the coverage package is not installed,
+          # so the instrumentation only slows the tests down and produces
+          # nothing. Set through the CLI environment variable, not through
+          # the coverageEnabled input: action v4.4.0 turns that input into
+          # --no-coverageEnabled, which CLI v0.1.76 rejects as an unknown
+          # argument. The CLI reads every option also from GAME_CI_<NAME>.
+          GAME_CI_COVERAGE_ENABLED: "false"
         with:
           cliVersion: v0.1.76
           # All = EditMode and PlayMode (scene smoke tests), one folder per
           # mode under artifactsPath. Standalone is not included.
           testMode: All
           artifactsPath: test-results
-          # No code coverage for now: the coverage package is not installed,
-          # so the instrumentation only slows the tests down and produces
-          # nothing. The action documents crashes with it on in some setups.
-          coverageEnabled: false
           githubToken: ${{ secrets.GITHUB_TOKEN }}
           checkName: Unity test results
 
