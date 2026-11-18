@@ -24,9 +24,6 @@ namespace StarCollector.Tests.PlayMode
         private static readonly Dictionary<string, (LogType Type, string Message)[]> ExpectedMessages =
             new Dictionary<string, (LogType Type, string Message)[]>
             {
-                // Deliberate entry to prove that an expected message passes.
-                // To be removed after the check.
-                ["SampleScene"] = new[] { (LogType.Error, "Deliberate error: SampleScene loaded.") },
             };
 
         // During a PlayMode run the Test Framework adds its own temporary
