@@ -5,6 +5,9 @@ using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
+// UnityEngine also has a PropertyAttribute (for inspector drawers): the
+// requirement property is the NUnit one.
+using PropertyAttribute = NUnit.Framework.PropertyAttribute;
 
 namespace StarCollector.Tests.PlayMode
 {
