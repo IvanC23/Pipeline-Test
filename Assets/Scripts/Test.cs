@@ -4,7 +4,7 @@ public class Test : MonoBehaviour
 {
     int numeroPrimo = 0;
     float numberOfSeconds = 0.0f;
-    // Start is called once before the first execution of Update after the MonoBehaviour is created
+    // Start is caled once before the first execution of Update after the MonoBehaviour is created
     void Start()
     {
         
