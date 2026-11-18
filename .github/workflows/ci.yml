@@ -64,3 +64,80 @@ jobs:
           incremental_files_only: false
           strict: false
           inline: warning
+
+  # Blocking: compiles the Unity project and runs the automated tests.
+  # Required check in the test and main rulesets: keep the job name.
+  # Compilation (S06) is covered here: the test runner opens the project in
+  # batch mode and compiles every assembly before running the tests, so a
+  # compile error fails this job. The player build comes later, with the
+  # versioned build artifact.
+  unity-tests:
+    # Pinned runner: the image the editor runs in is fixed by the Unity
+    # version, the host is fixed here, so results do not change when
+    # ubuntu-latest moves to a new release.
+    runs-on: ubuntu-24.04
+    # Every run activates the Unity license at the start and returns it at the
+    # end. One run at a time across the repository keeps the activations
+    # within the seats of the license (a push to development and the PR it
+    # updates would otherwise activate twice at once).
+    concurrency:
+      group: unity-license
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      # Lets the test runner publish the "Unity test results" check run.
+      checks: write
+    steps:
+      - uses: actions/checkout@v7
+
+      # Fails before starting Unity: ignoring failing log messages would hide
+      # unexpected errors logged during the tests.
+      - name: Reject LogAssert.ignoreFailingMessages = true
+        run: |
+          if grep -rnE --include='*.cs' 'ignoreFailingMessages[[:space:]]*=[[:space:]]*true' Assets; then
+            echo "::error::LogAssert.ignoreFailingMessages = true is not allowed: expect each log message with LogAssert.Expect instead."
+            exit 1
+          fi
+          echo "No forbidden LogAssert settings found."
+
+      # The Library folder holds the imported assets: restoring it avoids a
+      # full reimport on every run. A partial match from restore-keys is still
+      # faster than an empty folder.
+      - uses: actions/cache@v6
+        with:
+          path: Library
+          key: Library-${{ runner.os }}-${{ hashFiles('Assets/**', 'Packages/**', 'ProjectSettings/**') }}
+          restore-keys: |
+            Library-${{ runner.os }}-
+
+      # The editor version is read from ProjectSettings/ProjectVersion.txt.
+      # License and account come from the repository secrets.
+      # Exact versions: since v4.4.0 the action downloads the game-ci CLI and,
+      # with cliVersion "latest", asks the GitHub API for its newest release
+      # without a token. The unauthenticated limit is shared by every job on
+      # the runner IP and can fail the step with HTTP 403. A pinned CLI skips
+      # that call and keeps runs reproducible; update both versions on purpose.
+      - uses: game-ci/unity-test-runner@v4.4.0
+        id: tests
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          cliVersion: v0.1.76
+          # PlayMode is added with the first PlayMode test.
+          testMode: EditMode
+          artifactsPath: test-results
+          githubToken: ${{ secrets.GITHUB_TOKEN }}
+          checkName: Unity test results
+
+      # The XML report is kept also when tests fail: it is the evidence of the
+      # run and the input of the requirements matrix.
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: unity-test-results
+          # Same folder as artifactsPath above; a fixed path also works when
+          # the test step stops before setting its outputs.
+          path: test-results
+          if-no-files-found: warn
