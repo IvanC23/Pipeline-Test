@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RuleSet Name="Star Collector critical rules" Description="Critical Unity correctness rules raised to error. All other rules keep their default severity." ToolsVersion="10.0">
+  <Rules AnalyzerId="Microsoft.Unity.Analyzers" RuleNamespace="Microsoft.Unity.Analyzers">
+    <!-- Unity never calls a message with a wrong signature. -->
+    <Rule Id="UNT0006" Action="Error" />
+    <!-- Unity never calls a message with wrong letter case, e.g. update(). -->
+    <Rule Id="UNT0033" Action="Error" />
+    <!-- The C# null operators bypass the destroyed-object check of Unity objects. -->
+    <Rule Id="UNT0007" Action="Error" />
+    <Rule Id="UNT0008" Action="Error" />
+    <Rule Id="UNT0023" Action="Error" />
+    <Rule Id="UNT0029" Action="Error" />
+  </Rules>
+</RuleSet>
