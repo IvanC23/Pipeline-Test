@@ -21,7 +21,7 @@ namespace StarCollector.Tests.EditMode.Scoring
         }
 
         [Test]
-        [Property("Requirement", "FUNC-99")]
+        [Property("Requirement", "FUNC-02")]
         public void ConsecutiveMisses_BelowLimit_DoNotChangeDifficulty()
         {
             Repeat(adapter.RecordMiss, DifficultyAdapter.MissesBeforeEasing - 1);
