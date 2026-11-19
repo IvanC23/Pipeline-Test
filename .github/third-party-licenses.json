@@ -3,7 +3,8 @@
     "Licenses of the third-party components that the inventory script cannot read from the component itself.",
     "Names and versions are extracted by .github/scripts/third_party_inventory.py: never write them here.",
     "Each entry applies to the components of the same kind whose name matches the pattern (fnmatch, case-sensitive); the first match wins, so specific entries go before generic ones.",
-    "Unity packages: the license read from the LICENSE file of the package takes precedence."
+    "Unity packages: the license read from the LICENSE file of the package takes precedence.",
+    "Not listed in the inventory: built-in Unity packages (identified by the Unity Editor version) and tools preinstalled on the runners (identified by the runner image)."
   ],
   "licenses": [
     { "kind": "github-action", "match": "actions/*", "license": "MIT" },
@@ -16,19 +17,12 @@
     { "kind": "unity-editor", "match": "Unity Editor", "license": "Unity license (commercial)" },
     { "kind": "container-image", "match": "unityci/editor", "license": "MIT (GameCI image) + Unity license (editor)" },
 
-    { "kind": "unity-package", "match": "com.unity.modules.*", "license": "Unity license (built into the editor)" },
-
     { "kind": "binary", "match": "Microsoft.Unity.Analyzers", "license": "MIT" },
 
     { "kind": "dictionary", "match": "@cspell/dict-it-it", "license": "GPL-3.0-or-later" },
     { "kind": "dictionary", "match": "@cspell/dict-fr-fr", "license": "MIT" },
     { "kind": "dictionary", "match": "@cspell/dict-es-es", "license": "LGPL-3.0" },
 
-    { "kind": "runner-image", "match": "GitHub runner image *", "license": "GitHub-hosted runner" },
-
-    { "kind": "runtime", "match": "Python", "license": "PSF-2.0" },
-    { "kind": "runtime", "match": "git", "license": "GPL-2.0" },
-    { "kind": "runtime", "match": "GitHub CLI", "license": "MIT" },
-    { "kind": "runtime", "match": "Docker", "license": "Apache-2.0" }
+    { "kind": "runner-image", "match": "GitHub runner image *", "license": "GitHub-hosted runner" }
   ]
 }

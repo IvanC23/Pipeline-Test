@@ -327,11 +327,9 @@ jobs:
           name: unity-environment
           path: unity-environment
 
-      # GH_TOKEN only lets "gh --version" run without a login prompt.
       - name: Build the third-party inventory
         env:
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-          GH_TOKEN: ${{ github.token }}
         run: |
           python3 .github/scripts/third_party_inventory.py report \
             --unity-environment unity-environment \

@@ -6,11 +6,13 @@ decide them, so the inventory cannot drift from what is really used:
   - tool versions pinned in the workflows (env FOO_VERSION, action inputs
     ending in "Version", e.g. cliVersion);
   - Unity Editor version (ProjectSettings/ProjectVersion.txt);
-  - Unity packages, direct and indirect (Packages/packages-lock.json);
+  - Unity packages, direct and indirect (Packages/packages-lock.json),
+    except the built-in ones, identified by the Unity Editor version;
   - binaries committed under Assets (*.dll): file version and SHA-256;
   - cspell dictionaries imported by URL (cspell.json);
-  - environment of the jobs: runner image, Python, git, gh, Docker, and the
-    Unity Docker image really pulled by the unity-tests job.
+  - runner images of the jobs (they identify the preinstalled tools, such
+    as Python, git, gh and Docker), and the Unity Docker image really
+    pulled by the unity-tests job.
 
 Licenses are read from the components when possible (LICENSE file of the
 Unity packages); the others come from .github/third-party-licenses.json,
@@ -33,7 +35,6 @@ import fnmatch
 import hashlib
 import json
 import os
-import platform
 import re
 import struct
 import subprocess
@@ -62,16 +63,6 @@ def warn(message):
     print(f"::warning title=Third-party inventory::{message}")
 
 
-def run_command(args):
-    """First line of the output of a command, or None when it is missing."""
-    try:
-        result = subprocess.run(args, capture_output=True, text=True, timeout=30, check=False)
-    except (OSError, subprocess.SubprocessError):
-        return None
-    output = (result.stdout or result.stderr).strip()
-    return output.splitlines()[0] if output and result.returncode == 0 else None
-
-
 # --- unity-environment -----------------------------------------------------
 
 def detect_license(package_dir):
@@ -82,7 +73,6 @@ def detect_license(package_dir):
                 if pattern.search(text):
                     return name
             return f"unknown, see {candidate.name}"
-    # Built-in modules have no license file: the licenses file covers them.
     return ""
 
 
@@ -94,7 +84,6 @@ def command_unity_environment(args):
         f"job={os.environ.get('GITHUB_JOB', '')}",
         f"runner_image_os={os.environ.get('ImageOS', '')}",
         f"runner_image_version={os.environ.get('ImageVersion', '')}",
-        f"docker={run_command(['docker', '--version']) or ''}",
     ]
     try:
         images = subprocess.run(
@@ -205,9 +194,13 @@ def scan_packages(lock_file, licenses):
     data = json.loads(path.read_text(encoding="utf-8"))
     result = []
     for name, info in sorted(data.get("dependencies", {}).items()):
-        depth = info.get("depth", 0)
         source = info.get("source", "")
-        origin = info.get("url") or ("Unity Editor (built-in)" if source == "builtin" else source)
+        # Built-in packages ship with the editor: the Unity Editor version
+        # already identifies them.
+        if source == "builtin":
+            continue
+        depth = info.get("depth", 0)
+        origin = info.get("url") or source
         entry = component("unity-package", name, info.get("version", ""),
                           f"{path.as_posix()} ({'direct' if depth == 0 else f'indirect, depth {depth}'})",
                           origin, path.as_posix(), licenses.get(name))
@@ -251,25 +244,21 @@ def scan_cspell(cspell_file):
 def runner_component(job, image_os, image_version, location):
     if not image_os:
         return []
-    return [component("runner-image", f"GitHub runner image {image_os}", image_version or "unknown",
+    return [component("runner-image", f"GitHub runner image {image_os} ({job})", image_version or "unknown",
                       f"runs-on label, image of job {job}",
                       f"https://github.com/actions/runner-images/releases/tag/{image_os}/{image_version}",
                       location)]
 
 
 def scan_environment(unity_env_dir):
-    """Environment of this job, plus the one recorded by unity-tests."""
+    """Runner image of this job, plus what unity-tests recorded.
+
+    Tools preinstalled on the runner (Python, git, gh, Docker) are not
+    listed one by one: the runner image version identifies them, and its
+    release notes (linked) list every installed version.
+    """
     job = os.environ.get("GITHUB_JOB", "local")
     result = runner_component(job, os.environ.get("ImageOS"), os.environ.get("ImageVersion"), "this job")
-    result.append(component("runtime", "Python", platform.python_version(), f"runner image, job {job}",
-                            "https://www.python.org", sys.executable))
-    for name, args, pattern in (("git", ["git", "--version"], r"([0-9][\w.]*)"),
-                                ("GitHub CLI", ["gh", "--version"], r"([0-9][\w.]*)")):
-        output = run_command(args)
-        if output:
-            match = re.search(pattern, output)
-            result.append(component("runtime", name, match.group(1) if match else output,
-                                    f"runner image, job {job}", "", args[0]))
 
     licenses = {}
     env_dir = Path(unity_env_dir) if unity_env_dir else None
@@ -289,10 +278,6 @@ def scan_environment(unity_env_dir):
     unity_job = values.get("job") or "unity-tests"
     result += runner_component(unity_job, values.get("runner_image_os"), values.get("runner_image_version"),
                                f"recorded by {unity_job}")
-    if values.get("docker"):
-        match = re.search(r"([0-9][\w.]*)", values["docker"])
-        result.append(component("runtime", "Docker", match.group(1) if match else values["docker"],
-                                f"runner image, job {unity_job}", "", "docker"))
     if not images:
         warn(f"No Unity Docker image recorded by {unity_job}.")
     for image in images:
@@ -340,7 +325,6 @@ KIND_TITLES = [
     ("binary", "Binaries in the repository"),
     ("dictionary", "Spelling dictionaries"),
     ("runner-image", "Runner images"),
-    ("runtime", "Runtimes and command-line tools of the runners"),
 ]
 
 
