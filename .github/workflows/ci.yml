@@ -14,11 +14,20 @@ on:
 permissions:
   contents: read
 
+# Third-party actions are pinned to a full commit SHA, with the version as a
+# comment: a tag can be moved to other code, a commit cannot. The inventory
+# job reads both. To update: resolve the new tag to its commit
+# (git ls-remote --tags https://github.com/<owner>/<repo>) and change both.
+#
+# Runners: ubuntu-latest, kept up to date by GitHub; the inventory job records
+# the exact runner image of every run. Only unity-tests keeps a fixed label
+# (see the comment there).
+
 jobs:
   smoke-check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # Event data is passed through env, never interpolated into the script,
       # so a crafted branch name cannot inject shell commands.
       - name: Show event context
@@ -39,8 +48,8 @@ jobs:
   spellcheck:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: streetsidesoftware/cspell-action@v9
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: streetsidesoftware/cspell-action@ce1816e4ce36532956ac6e983737392774b6e169 # v9.2.0
         with:
           files: |
             Assets/**/*.cs
@@ -55,9 +64,9 @@ jobs:
   # without Unity: fails in seconds, also when the project does not compile.
   # Required check in the test and main rulesets: keep the job name.
   requirement-ids:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # Python 3 is preinstalled on the runner; the script uses only the
       # standard library.
@@ -80,7 +89,7 @@ jobs:
   # (MIT) behaves the same on personal and organization repositories.
   secret-scan:
     if: github.event_name == 'pull_request'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     env:
       # To update: take the new version from the gitleaks releases page and
       # the sha256 of gitleaks_<version>_linux_x64.tar.gz from the
@@ -92,7 +101,7 @@ jobs:
       # git downloads only the contents the scanned patches need.
       # The sparse checkout keeps the working tree to the root files and
       # .github, where .gitleaksignore lives: no need for the whole project.
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           filter: blob:none
@@ -130,7 +139,7 @@ jobs:
       # Evidence of the scan, also when it fails (secrets are redacted).
       - name: Upload the scan report
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: gitleaks-report
           path: gitleaks-report.sarif
@@ -142,8 +151,8 @@ jobs:
   spellcheck-docs:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: streetsidesoftware/cspell-action@v9
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: streetsidesoftware/cspell-action@ce1816e4ce36532956ac6e983737392774b6e169 # v9.2.0
         with:
           files: |
             *.md
@@ -161,7 +170,8 @@ jobs:
   unity-tests:
     # Pinned runner: the image the editor runs in is fixed by the Unity
     # version, the host is fixed here, so results do not change when
-    # ubuntu-latest moves to a new release.
+    # ubuntu-latest moves to a new release. A new Ubuntu release is adopted
+    # on purpose, with a full test run, before GitHub retires this label.
     runs-on: ubuntu-24.04
     # Every run activates the Unity license at the start and returns it at the
     # end. One run at a time across the repository keeps the activations
@@ -175,7 +185,7 @@ jobs:
       # Lets the test runner publish the "Unity test results" check run.
       checks: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # Fails before starting Unity: ignoring failing log messages would hide
       # unexpected errors logged during the tests.
@@ -190,7 +200,7 @@ jobs:
       # The Library folder holds the imported assets: restoring it avoids a
       # full reimport on every run. A partial match from restore-keys is still
       # faster than an empty folder.
-      - uses: actions/cache@v6
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: Library
           key: Library-${{ runner.os }}-${{ hashFiles('Assets/**', 'Packages/**', 'ProjectSettings/**') }}
@@ -204,7 +214,7 @@ jobs:
       # without a token. The unauthenticated limit is shared by every job on
       # the runner IP and can fail the step with HTTP 403. A pinned CLI skips
       # that call and keeps runs reproducible; update both versions on purpose.
-      - uses: game-ci/unity-test-runner@v4.4.0
+      - uses: game-ci/unity-test-runner@32e57712352b500e17974b245a6dce9e11a73213 # v4.4.0
         id: tests
         env:
           UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
@@ -228,13 +238,27 @@ jobs:
 
       # The XML report is kept also when tests fail: it is the evidence of the
       # run and the input of the requirements matrix.
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
           name: unity-test-results
           # Same folder as artifactsPath above; a fixed path also works when
           # the test step stops before setting its outputs.
           path: test-results
+          if-no-files-found: warn
+
+      # Third-party inventory: the Docker image really pulled for Unity and
+      # the licenses of the packages in Library/PackageCache exist only in
+      # this job. Recorded in under a second, also when the tests fail.
+      - name: Record the Unity environment
+        if: ${{ !cancelled() }}
+        run: python3 .github/scripts/third_party_inventory.py unity-environment --output unity-environment
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: ${{ !cancelled() }}
+        with:
+          name: unity-environment
+          path: unity-environment
           if-no-files-found: warn
 
   # Traceability: builds the requirements matrix (requirement -> tests ->
@@ -249,14 +273,14 @@ jobs:
     # Also after a failure of unity-tests: the matrix shows what failed, or
     # reports the missing XML. Not when the run is cancelled.
     if: ${{ !cancelled() }}
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # When unity-tests stops before writing any report, the artifact does
       # not exist: the step is allowed to fail and the script reports the
       # missing XML as the error.
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         continue-on-error: true
         with:
           name: unity-test-results
@@ -275,9 +299,48 @@ jobs:
           --results test-results
           --output requirements-matrix
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
           name: requirements-matrix
           path: requirements-matrix
+          if-no-files-found: warn
+
+  # Evidence, not a check: lists every third-party component (actions,
+  # tools, Unity Editor and packages, Docker image, binaries, dictionaries,
+  # runner images) with its exact version, extracted from the files that
+  # decide it. Category, license, purpose and validation come from
+  # .github/third-party-metadata.json; a component without an entry there
+  # only gives a warning. Not a required check.
+  # Waits for unity-tests only to read the Docker image it used; it then
+  # runs in parallel with requirements-matrix and takes a few seconds.
+  third-party-inventory:
+    needs: unity-tests
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        continue-on-error: true
+        with:
+          name: unity-environment
+          path: unity-environment
+
+      # GH_TOKEN only lets "gh --version" run without a login prompt.
+      - name: Build the third-party inventory
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 .github/scripts/third_party_inventory.py report \
+            --unity-environment unity-environment \
+            --output third-party-inventory
+          cat third-party-inventory/inventory.md >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: third-party-inventory
+          path: third-party-inventory
           if-no-files-found: warn
