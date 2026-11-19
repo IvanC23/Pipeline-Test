@@ -28,7 +28,7 @@ namespace StarCollector.Tests.EditMode.Scoring
         public void Calculate_BetweenTargetAndMaxTime_DecreasesLinearly()
         {
             // Halfway between 2 s and 10 s the time factor is 0.5.
-            Assert.That(calculator.Calculate(6.0, 1.0), Is.EqualTo(500))
+            Assert.That(calculator.Calculate(6.0, 1.0), Is.EqualTo(500));
             Assert.That(calculator.Calculate(8.0, 1.0), Is.EqualTo(250));
         }
 

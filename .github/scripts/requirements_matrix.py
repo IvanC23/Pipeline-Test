@@ -14,8 +14,9 @@ Exit code 1 (traceability problem):
   - a requirement of the catalog with no test ("Not covered");
   - a requirement whose tests did not run ("Not verified": skipped,
     inconclusive).
-A failed test is shown as "Failed", with its reason, but does not fail this
-script: the unity-tests job already fails on it.
+A failed test is shown as "Failed", with its reason (the failure message on
+one line, shortened to MAX_REASON_LENGTH), but does not fail this script: the
+unity-tests job already fails on it.
 Requirement ids that are not in the catalog are reported as warnings.
 
 Only the Python standard library is used.
@@ -70,10 +71,14 @@ def requirements_of(element):
 
 
 def reason_of(test_case):
-    """Label and first line of the failure or skip message, if any."""
+    """Label and failure or skip message on one line, if any.
+
+    The message lines are joined, so that an assertion keeps both
+    "Expected: ..." and "But was: ...".
+    """
     message = test_case.findtext("failure/message") or test_case.findtext("reason/message") or ""
-    lines = [line.strip() for line in message.strip().splitlines() if line.strip()]
-    reason = lines[0] if lines else ""
+    lines = [" ".join(line.split()) for line in message.splitlines() if line.strip()]
+    reason = " / ".join(lines)
     label = test_case.get("label")
     if label:
         reason = f"{label}: {reason}" if reason else label

@@ -1,5 +1,5 @@
 {
-  "description": "Requirements verified by the automated tests. Each test declares the requirement it verifies with [Category(\"ID\")]. The requirements matrix starts from this list, so a requirement without tests is reported as not covered.",
+  "description": "Requirements verified by the automated tests. Each test declares the requirement it verifies with [Property(\"Requirement\", \"ID\")]. The requirements matrix starts from this list, so a requirement without tests is reported as not covered.",
   "requirements": [
     {
       "id": "FUNC-01",
