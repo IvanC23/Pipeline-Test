@@ -14,7 +14,7 @@ namespace StarCollector.Tests.EditMode.Scoring
         }
 
         [Test]
-        [Property("Requirement", "FUNC-02")]
+        [Property("Requirement", "XYZ-01")]
         public void NewAdapter_StartsAtBaseValues()
         {
             AssertValues(DifficultyAdapter.BaseTargetDistance, DifficultyAdapter.BaseAccuracyThreshold);
