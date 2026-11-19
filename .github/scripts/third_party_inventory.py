@@ -12,10 +12,11 @@ decide them, so the inventory cannot drift from what is really used:
   - environment of the jobs: runner image, Python, git, gh, Docker, and the
     Unity Docker image really pulled by the unity-tests job.
 
-What no file contains (category, license when it is not detected, purpose,
-validation) comes from a small metadata file, written once per component
-and matched by name pattern. A component without metadata is reported with
-a warning, it never fails the job: the inventory is evidence, not a check.
+Licenses are read from the components when possible (LICENSE file of the
+Unity packages); the others come from .github/third-party-licenses.json,
+written once and matched by name pattern. A component with an unknown
+license gives a warning, it never fails the job: the inventory is evidence,
+not a check.
 
 Two commands:
   unity-environment  run inside the unity-tests job, after the tests: records
@@ -81,7 +82,7 @@ def detect_license(package_dir):
                 if pattern.search(text):
                     return name
             return f"unknown, see {candidate.name}"
-    # Built-in modules have no license file: the metadata file covers them.
+    # Built-in modules have no license file: the licenses file covers them.
     return ""
 
 
@@ -309,29 +310,24 @@ def scan_environment(unity_env_dir):
     return result, licenses
 
 
-# --- report: metadata and output ----------------------------------------------
+# --- report: licenses and output --------------------------------------------
 
-def apply_metadata(components, metadata_file):
-    entries = json.loads(Path(metadata_file).read_text(encoding="utf-8")).get("components", [])
+def apply_licenses(components, licenses_file):
+    """License detected from the component itself, otherwise from the file."""
+    entries = json.loads(Path(licenses_file).read_text(encoding="utf-8")).get("licenses", [])
     missing = []
     for item in components:
-        match = next((m for m in entries
-                      if m.get("kind") == item["kind"] and fnmatch.fnmatchcase(item["name"], m.get("match", ""))),
-                     None)
-        if match is None:
+        license_ = item["detectedLicense"]
+        if not license_:
+            match = next((e for e in entries
+                          if e.get("kind") == item["kind"] and fnmatch.fnmatchcase(item["name"], e.get("match", ""))),
+                         None)
+            license_ = match.get("license") if match else None
+        if not license_:
             missing.append(item)
-            item.update(category="?", license=item["detectedLicense"] or "?", purpose="?", validation="?",
-                        metadataMissing=True)
-            continue
-        item.update(
-            category=match.get("category", "?"),
-            license=item["detectedLicense"] or match.get("license", "?"),
-            purpose=match.get("purpose", "?"),
-            validation=match.get("validation", "?"),
-            metadataMissing=False,
-        )
+        item["license"] = license_ or "unknown"
     for item in missing:
-        warn(f"No metadata for {item['kind']} '{item['name']}': add an entry to {metadata_file}.")
+        warn(f"License of {item['kind']} '{item['name']}' unknown: add an entry to {licenses_file}.")
     return missing
 
 
@@ -352,25 +348,43 @@ def cell(value):
     return str(value).replace("|", "\\|").replace("\n", " ") if value not in (None, "") else "-"
 
 
+def short_identity(item):
+    """Short form of what fixes the exact content (full value in the JSON)."""
+    pinned = item["pinnedBy"]
+    for prefix, label in (("commit ", "commit"), ("digest sha256:", "sha256"), ("version + SHA-256 ", "SHA-256")):
+        if pinned.startswith(prefix):
+            return f"{label} {pinned[len(prefix):][:8]}"
+    match = re.search(r"SHA-256 ([0-9a-f]{8})", pinned)
+    if match:
+        return f"SHA-256 {match.group(1)}"
+    match = re.search(r"revision (\w+)", pinned)
+    if match:
+        return f"revision {match.group(1)}"
+    return "mutable tag" if pinned == "tag (mutable)" else ""
+
+
+def link(url):
+    if not url or not url.startswith("http"):
+        return cell(url)
+    text = re.sub(r"^https?://", "", url).rstrip("/")
+    return f"[{cell(text)}]({url})"
+
+
 def write_markdown(path, header, components, missing):
     lines = ["# Third-party component inventory", ""]
     lines += [f"- {key}: {cell(value)}" for key, value in header.items()]
     mutable = [c for c in components if c["pinnedBy"] == "tag (mutable)"]
-    lines += [f"- Components: {len(components)}; without metadata: {len(missing)}; "
+    lines += [f"- Components: {len(components)}; unknown license: {len(missing)}; "
               f"actions on a mutable tag: {len(mutable)}", ""]
-    lines += ["Categories: A = part of the game; B = decides whether a change passes "
-              "(process tool); editor = editor only, neither in the game nor a check.", ""]
     for kind, title in KIND_TITLES:
         items = [c for c in components if c["kind"] == kind]
         if not items:
             continue
-        lines += [f"## {title}", "",
-                  "| Component | Version | Pinned by | Cat. | License | Purpose | Validation | Source |",
-                  "|---|---|---|---|---|---|---|---|"]
+        lines += [f"## {title}", "", "| Component | Version | License | Source |", "|---|---|---|---|"]
         for c in items:
-            lines.append("| " + " | ".join(cell(v) for v in (
-                c["name"], c["version"], c["pinnedBy"], c["category"], c["license"],
-                c["purpose"], c["validation"], c["source"])) + " |")
+            identity = short_identity(c)
+            version = f"{c['version']} ({identity})" if identity else c["version"]
+            lines.append(f"| {cell(c['name'])} | {cell(version)} | {cell(c['license'])} | {link(c['source'])} |")
         lines.append("")
     Path(path).write_text("\n".join(lines), encoding="utf-8")
 
@@ -386,7 +400,7 @@ def command_report(args):
     components += scan_cspell(args.cspell)
     components += [c for c in environment if c["kind"] != "container-image"]
 
-    missing = apply_metadata(components, args.metadata)
+    missing = apply_licenses(components, args.licenses)
 
     server = os.environ.get("GITHUB_SERVER_URL", "")
     repository = os.environ.get("GITHUB_REPOSITORY", "")
@@ -404,7 +418,7 @@ def command_report(args):
     (out / "inventory.json").write_text(
         json.dumps({"header": header, "components": components}, indent=2) + "\n", encoding="utf-8")
     write_markdown(out / "inventory.md", header, components, missing)
-    print(f"{len(components)} components, {len(missing)} without metadata.")
+    print(f"{len(components)} components, {len(missing)} with unknown license.")
     return 0
 
 
@@ -423,7 +437,7 @@ def main():
     report.add_argument("--packages-lock", default="Packages/packages-lock.json")
     report.add_argument("--assets", default="Assets")
     report.add_argument("--cspell", default="cspell.json")
-    report.add_argument("--metadata", default=".github/third-party-metadata.json")
+    report.add_argument("--licenses", default=".github/third-party-licenses.json")
     report.add_argument("--unity-environment", default=None)
     report.add_argument("--output", required=True)
 
