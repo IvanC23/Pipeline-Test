@@ -1,0 +1,44 @@
+{
+  "_comment": [
+    "What the files of the project do not say about a third-party component.",
+    "Names and versions are extracted by .github/scripts/third_party_inventory.py: never write them here.",
+    "Each entry applies to the components of the same kind whose name matches the pattern (fnmatch, case-sensitive); the first match wins, so specific entries go before generic ones.",
+    "A license detected from the component itself takes precedence over the license written here.",
+    "Categories: A = part of the game; B = decides whether a change passes (process tool); editor = editor only, neither in the game nor a check."
+  ],
+  "components": [
+    { "kind": "github-action", "match": "actions/checkout", "category": "B", "license": "MIT", "purpose": "Checks out the repository in the jobs", "validation": "Indirect: every job depends on it" },
+    { "kind": "github-action", "match": "actions/cache", "category": "B", "license": "MIT", "purpose": "Restores the Unity Library folder between runs", "validation": "Indirect: a wrong cache only slows down or fails unity-tests" },
+    { "kind": "github-action", "match": "actions/upload-artifact", "category": "B", "license": "MIT", "purpose": "Keeps reports and inventories as run evidence", "validation": "Indirect: requirements-matrix reads the uploaded test results" },
+    { "kind": "github-action", "match": "actions/download-artifact", "category": "B", "license": "MIT", "purpose": "Passes reports between jobs", "validation": "Indirect: a missing report fails requirements-matrix" },
+    { "kind": "github-action", "match": "streetsidesoftware/cspell-action", "category": "B", "license": "MIT", "purpose": "Spell check of C# code (blocking) and documentation (informative)", "validation": "S11 proof: a spelling error in a .cs comment fails the check" },
+    { "kind": "github-action", "match": "game-ci/unity-test-runner", "category": "B", "license": "MIT", "purpose": "Compiles the Unity project and runs the EditMode and PlayMode tests", "validation": "S04/S06/S25 proofs: compile error and failing test fail unity-tests" },
+
+    { "kind": "tool", "match": "gitleaks", "category": "B", "license": "MIT", "purpose": "Secret scanning of the pull request commits", "validation": "S08 proof: a fake token fails secret-scan" },
+    { "kind": "tool", "match": "game-ci/unity-test-runner:cliVersion", "category": "B", "license": "MIT", "purpose": "GameCI command-line tool started by unity-test-runner", "validation": "Same proofs as game-ci/unity-test-runner" },
+
+    { "kind": "unity-editor", "match": "Unity Editor", "category": "A+B", "license": "Unity license (commercial)", "purpose": "Game engine; compiles and runs the tests in CI", "validation": "S04/S06: project compiles and tests pass in CI" },
+    { "kind": "container-image", "match": "unityci/editor", "category": "B", "license": "GameCI image (MIT) containing the Unity Editor (Unity license)", "purpose": "Environment in which unity-tests runs the Unity Editor", "validation": "Same proofs as game-ci/unity-test-runner" },
+
+    { "kind": "unity-package", "match": "com.unity.test-framework*", "category": "B", "license": "Unity Companion License", "purpose": "Unity Test Framework: runs the automated tests", "validation": "S04/S25: failing test fails unity-tests" },
+    { "kind": "unity-package", "match": "com.unity.ext.nunit", "category": "B", "license": "Unity Package Distribution License", "purpose": "NUnit version used by the Unity Test Framework", "validation": "S04/S05: tests and requirement properties work" },
+    { "kind": "unity-package", "match": "com.unity.ide.*", "category": "editor", "license": "MIT", "purpose": "IDE integration (project files for the code editor)", "validation": "Not needed: not in the game, not a check" },
+    { "kind": "unity-package", "match": "com.unity.collab-proxy", "category": "editor", "license": "Unity Package Distribution License", "purpose": "Unity Version Control integration in the editor (not used)", "validation": "Not needed: not in the game, not a check" },
+    { "kind": "unity-package", "match": "com.unity.multiplayer.center", "category": "editor", "license": "Unity Package Distribution License", "purpose": "Editor window of the multiplayer packages (not used)", "validation": "Not needed: not in the game, not a check" },
+    { "kind": "unity-package", "match": "com.unity.modules.*", "category": "A", "license": "Part of the Unity Editor (Unity license)", "purpose": "Built-in engine module", "validation": "Project tests (S04, S25)" },
+    { "kind": "unity-package", "match": "com.unity.*", "category": "A", "license": "See the LICENSE file of the package", "purpose": "Unity package of the project or one of its dependencies", "validation": "Project tests (S04, S25)" },
+
+    { "kind": "binary", "match": "Microsoft.Unity.Analyzers", "category": "B", "license": "MIT", "purpose": "Roslyn analyzers with Unity-specific rules", "validation": "S07 proofs: UNT0008 and UNT0033 fail compilation" },
+
+    { "kind": "dictionary", "match": "@cspell/dict-it-it", "category": "B", "license": "GPL-3.0-or-later", "purpose": "Italian spelling dictionary", "validation": "S11" },
+    { "kind": "dictionary", "match": "@cspell/dict-fr-fr", "category": "B", "license": "MIT", "purpose": "French spelling dictionary", "validation": "S11" },
+    { "kind": "dictionary", "match": "@cspell/dict-es-es", "category": "B", "license": "LGPL-3.0", "purpose": "Spanish spelling dictionary", "validation": "S11" },
+
+    { "kind": "runner-image", "match": "GitHub runner image *", "category": "B", "license": "GitHub-hosted runner (software list in the linked release notes)", "purpose": "Machine on which the jobs run", "validation": "Indirect: every job depends on it" },
+
+    { "kind": "runtime", "match": "Python", "category": "B", "license": "PSF-2.0", "purpose": "Runs the requirement, matrix and inventory scripts", "validation": "S05/S24 proofs of the scripts" },
+    { "kind": "runtime", "match": "git", "category": "B", "license": "GPL-2.0", "purpose": "Version control on the runners", "validation": "Indirect" },
+    { "kind": "runtime", "match": "GitHub CLI", "category": "B", "license": "MIT", "purpose": "Reads the referenced issues in issue-links", "validation": "S28 proofs of issue-links" },
+    { "kind": "runtime", "match": "Docker", "category": "B", "license": "Apache-2.0", "purpose": "Runs the Unity Editor image in unity-tests", "validation": "Indirect: same proofs as game-ci/unity-test-runner" }
+  ]
+}
