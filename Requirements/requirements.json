@@ -1,5 +1,6 @@
 {
   "description": "Requirements verified by the automated tests. Each test declares the requirement it verifies with [Property(\"Requirement\", \"ID\")]. The requirements matrix starts from this list, so a requirement without tests is reported as not covered.",
+  "idPrefixes": ["FUNC", "IO", "DATA", "NET", "SEC", "USR", "RISK", "INT"],
   "requirements": [
     {
       "id": "FUNC-01",

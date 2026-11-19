@@ -49,6 +49,24 @@ jobs:
           strict: true
           inline: error
 
+  # Blocking: every requirement id used by a test, and every id of the
+  # catalog, must have the format PREFIX-nn with an allowed prefix, and the
+  # ids used by tests must be in the catalog. Static check on the sources,
+  # without Unity: fails in seconds, also when the project does not compile.
+  # Required check in the test and main rulesets: keep the job name.
+  requirement-ids:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      # Python 3 is preinstalled on the runner; the script uses only the
+      # standard library.
+      - name: Check requirement ids
+        run: >-
+          python3 .github/scripts/check_requirement_ids.py
+          --requirements Requirements/requirements.json
+          --sources Assets
+
   # Informative: spelling errors in documentation and localization files are
   # reported as warnings, the job stays green. Not a required check.
   # Only the listed folders are checked, to skip unrelated .txt files.
