@@ -3,7 +3,11 @@
     "rootNamespace": "StarCollector.Tests.EditMode",
     "references": [
         "UnityEngine.TestRunner",
-        "UnityEditor.TestRunner"
+        "UnityEditor.TestRunner",
+        "StarCollector.Scoring",
+        "StarCollector.InputConversion",
+        "StarCollector.Character",
+        "StarCollector.Online"
     ],
     "includePlatforms": [
         "Editor"

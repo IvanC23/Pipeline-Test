@@ -5,6 +5,9 @@ using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
+// UnityEngine also has a PropertyAttribute (for inspector drawers): the
+// requirement property is the NUnit one.
+using PropertyAttribute = NUnit.Framework.PropertyAttribute;
 
 namespace StarCollector.Tests.PlayMode
 {
@@ -46,6 +49,7 @@ namespace StarCollector.Tests.PlayMode
         }
 
         [UnityTest]
+        [Property("Requirement", "RISK-03")]
         public IEnumerator Scene_LoadsWithoutUnexpectedErrors([ValueSource(nameof(BuildSceneNames))] string sceneName)
         {
             // Expectations are declared before the code that logs them.
