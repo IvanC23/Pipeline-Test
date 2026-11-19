@@ -44,10 +44,6 @@
     {
       "id": "RISK-03",
       "title": "Loading a scene of the build does not log unexpected errors or exceptions."
-    },
-    {
-      "id": "USR-01",
-      "title": "Deliberate test entry without tests."
     }
   ]
 }
