@@ -14,14 +14,14 @@ namespace StarCollector.Tests.EditMode.Scoring
         }
 
         [Test]
-        [Property("Requirement", "XYZ-01")]
+        [Property("Requirement", "FUNC-02")]
         public void NewAdapter_StartsAtBaseValues()
         {
             AssertValues(DifficultyAdapter.BaseTargetDistance, DifficultyAdapter.BaseAccuracyThreshold);
         }
 
         [Test]
-        [Property("Requirement", "FUNC-02")]
+        [Property("Requirement", "FUNC-99")]
         public void ConsecutiveMisses_BelowLimit_DoNotChangeDifficulty()
         {
             Repeat(adapter.RecordMiss, DifficultyAdapter.MissesBeforeEasing - 1);
