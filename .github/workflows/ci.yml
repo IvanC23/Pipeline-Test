@@ -67,6 +67,75 @@ jobs:
           --requirements Requirements/requirements.json
           --sources Assets
 
+  # Blocking: fails when a commit of the pull request adds a secret
+  # (token, API key, password). Required check in the test and main rulesets:
+  # keep the job name.
+  # Only the changes of the pull request are scanned (the patches of the
+  # commits between the base and the head of the pull request), never the
+  # whole history: the time depends on the size of the change, not of the
+  # project. A secret added and removed inside the same pull request is still
+  # found, because every commit is scanned, not only the final result.
+  # The official gitleaks binary is used instead of gitleaks-action: the
+  # action needs a license key on organization repositories, the binary
+  # (MIT) behaves the same on personal and organization repositories.
+  secret-scan:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    env:
+      # To update: take the new version from the gitleaks releases page and
+      # the sha256 of gitleaks_<version>_linux_x64.tar.gz from the
+      # gitleaks_<version>_checksums.txt file of the same release.
+      GITLEAKS_VERSION: 8.30.1
+      GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+    steps:
+      # Full commit graph (fetch-depth 0) but no file contents (blob:none):
+      # git downloads only the contents the scanned patches need.
+      # The sparse checkout keeps the working tree to the root files and
+      # .github, where .gitleaksignore lives: no need for the whole project.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          filter: blob:none
+          sparse-checkout: .github
+
+      # The archive is verified against the pinned checksum before use:
+      # a different or altered download stops the job.
+      - name: Install gitleaks
+        run: |
+          archive="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -sSfL -o "$RUNNER_TEMP/$archive" \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/$archive"
+          echo "${GITLEAKS_SHA256}  $RUNNER_TEMP/$archive" | sha256sum --check --strict
+          tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP" gitleaks
+          "$RUNNER_TEMP/gitleaks" version
+
+      # base..head = the commits of the pull request only.
+      # --redact: the secret is never printed in the log or in the report.
+      # --ignore-gitleaks-allow: an inline "gitleaks:allow" comment cannot
+      # silence a finding; accepted false positives go in .gitleaksignore,
+      # a file reviewed in the pull request like any other change.
+      - name: Scan the pull request commits
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          echo "Scanning commits ${BASE_SHA}..${HEAD_SHA}"
+          git log --oneline "${BASE_SHA}..${HEAD_SHA}"
+          "$RUNNER_TEMP/gitleaks" git \
+            --no-banner --verbose --redact --ignore-gitleaks-allow \
+            --log-opts="${BASE_SHA}..${HEAD_SHA}" \
+            --report-format sarif --report-path gitleaks-report.sarif \
+            .
+
+      # Evidence of the scan, also when it fails (secrets are redacted).
+      - name: Upload the scan report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: gitleaks-report
+          path: gitleaks-report.sarif
+          if-no-files-found: warn
+
   # Informative: spelling errors in documentation and localization files are
   # reported as warnings, the job stays green. Not a required check.
   # Only the listed folders are checked, to skip unrelated .txt files.
