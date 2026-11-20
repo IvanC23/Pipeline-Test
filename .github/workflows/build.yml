@@ -1,0 +1,124 @@
+name: Build
+
+on:
+  # Every merge into test is a push to test: the build of the code that is
+  # really in test, the one the manual tests run on.
+  push:
+    branches: [test]
+  # Manual rebuild from the Actions tab (e.g. after an expired artifact).
+  workflow_dispatch:
+
+# Least privilege: the build only reads the repository.
+permissions:
+  contents: read
+
+# Third-party actions are pinned to a full commit SHA, with the version as a
+# comment (see ci.yml). The inventory job of ci.yml reads this file too.
+
+env:
+  TARGET_PLATFORM: StandaloneWindows64
+  BUILD_NAME: StarCollector
+
+jobs:
+  player-build:
+    runs-on: ubuntu-latest
+    # Same group as unity-tests in ci.yml: one Unity license activation at a
+    # time across the repository.
+    concurrency:
+      group: unity-license
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # The version is decided by people and written in the project
+      # (Project Settings > Player > Version). The pipeline only reads it.
+      - name: Read the version
+        id: version
+        run: |
+          version=$(sed -n 's/^  bundleVersion: *//p' ProjectSettings/ProjectSettings.asset | tr -d '\r')
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error title=Invalid version::bundleVersion '$version' is not MAJOR.MINOR.PATCH."
+            exit 1
+          fi
+          short_sha="${GITHUB_SHA::7}"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "short-sha=$short_sha" >> "$GITHUB_OUTPUT"
+          echo "package=${BUILD_NAME}-${version}+${short_sha}-${TARGET_PLATFORM}" >> "$GITHUB_OUTPUT"
+
+      # Own cache key per target platform: the imported assets differ from
+      # the ones of unity-tests (editor platform).
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: Library
+          key: Library-${{ env.TARGET_PLATFORM }}-${{ hashFiles('Assets/**', 'Packages/**', 'ProjectSettings/**') }}
+          restore-keys: |
+            Library-${{ env.TARGET_PLATFORM }}-
+
+      # The editor version is read from ProjectSettings/ProjectVersion.txt.
+      # versioning None: the builder keeps the version written in the project
+      # (the default, Semantic, would compute one from the git tags).
+      # cliVersion pinned for the same reason as in unity-tests (ci.yml).
+      - uses: game-ci/unity-builder@eb1b9fba120c6e62c9fb7a7a81d6c107ce004c45 # v6.0.0
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          cliVersion: v0.1.76
+          targetPlatform: ${{ env.TARGET_PLATFORM }}
+          buildName: ${{ env.BUILD_NAME }}
+          buildsPath: build
+          versioning: None
+
+      # The package: the player, its build information and the SHA-256 of
+      # every file. The build folder is written by the container (owned by
+      # root), so the package is assembled in a separate folder.
+      - name: Assemble the package
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          PACKAGE: ${{ steps.version.outputs.package }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          mkdir -p "package/player"
+          cp -R "build/${TARGET_PLATFORM}/." "package/player/"
+          cd package
+          (cd player && find . -type f -print0 | sort -z | xargs -0 sha256sum) > SHA256SUMS.txt
+          image=$(docker image ls --digests --format '{{.Repository}}:{{.Tag}}@{{.Digest}}' unityci/editor | head -n 1)
+          unity=$(sed -n 's/^m_EditorVersionWithRevision: *//p' ../ProjectSettings/ProjectVersion.txt | tr -d '\r')
+          jq -n \
+            --arg product "Star Collector" \
+            --arg version "$VERSION" \
+            --arg build "${VERSION}+${GITHUB_SHA::7}" \
+            --arg commit "$GITHUB_SHA" \
+            --arg branch "$GITHUB_REF_NAME" \
+            --arg platform "$TARGET_PLATFORM" \
+            --arg unity "$unity" \
+            --arg image "$image" \
+            --arg run "$RUN_URL" \
+            --arg built "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{product: $product, version: $version, build: $build, commit: $commit,
+              branch: $branch, platform: $platform, unityEditor: $unity,
+              dockerImage: $image, run: $run, builtAt: $built}' > build-info.json
+          # sha256sum line: "<hash> ./<file>" ("*" before the name in binary mode).
+          exe_hash=$(grep -E "[ *]\./${BUILD_NAME}\.exe$" SHA256SUMS.txt | cut -d ' ' -f 1)
+          {
+            echo "### Build \`${VERSION}+${GITHUB_SHA::7}\`"
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Package | \`${PACKAGE}\` |"
+            echo "| Commit | \`${GITHUB_SHA}\` (${GITHUB_REF_NAME}) |"
+            echo "| Platform | ${TARGET_PLATFORM} |"
+            echo "| Unity | ${unity} |"
+            echo "| SHA-256 of ${BUILD_NAME}.exe | \`${exe_hash:-not found}\` |"
+            echo "| Files | $(wc -l < SHA256SUMS.txt) (all hashes in SHA256SUMS.txt) |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ -z "$exe_hash" ]; then
+            echo "::error title=Player not found::${BUILD_NAME}.exe is not in the build folder."
+            exit 1
+          fi
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ steps.version.outputs.package }}
+          path: package
+          if-no-files-found: error

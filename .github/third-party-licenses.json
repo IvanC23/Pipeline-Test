@@ -10,9 +10,11 @@
     { "kind": "github-action", "match": "actions/*", "license": "MIT" },
     { "kind": "github-action", "match": "streetsidesoftware/cspell-action", "license": "MIT" },
     { "kind": "github-action", "match": "game-ci/unity-test-runner", "license": "MIT" },
+    { "kind": "github-action", "match": "game-ci/unity-builder", "license": "MIT" },
 
     { "kind": "tool", "match": "gitleaks", "license": "MIT" },
     { "kind": "tool", "match": "game-ci/unity-test-runner:cliVersion", "license": "MIT" },
+    { "kind": "tool", "match": "game-ci/unity-builder:cliVersion", "license": "MIT" },
 
     { "kind": "unity-editor", "match": "Unity Editor", "license": "Unity license (commercial)" },
     { "kind": "container-image", "match": "unityci/editor", "license": "MIT (GameCI image) + Unity license (editor)" },
