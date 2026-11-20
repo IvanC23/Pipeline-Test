@@ -1,0 +1,42 @@
+name: Change after release
+description: Request a change to a version that has already been released.
+labels: ["change-after-release"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this form to request a change **after** the version has been released.
+        All fields are optional: fill in what you know now and add the rest as comments.
+  - type: input
+    id: request-date
+    attributes:
+      label: Date of change request
+      description: The date the change was requested, which can be earlier than today.
+      placeholder: YYYY-MM-DD
+  - type: dropdown
+    id: classification
+    attributes:
+      label: Classification
+      description: Decided by the team, not by the pipeline.
+      options:
+        - Major
+        - Minor
+        - Bugfix
+  - type: input
+    id: target-version
+    attributes:
+      label: Target version
+      description: The version that will include this change (MAJOR.MINOR.PATCH).
+      placeholder: 1.2.0
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What changes and why.
+  - type: markdown
+    attributes:
+      value: |
+        **How this issue continues.** Record each phase as a comment on this issue:
+        authorization (with the review meeting reference), unit tests, promotion to `test`,
+        integration and other manual tests (with the report reference), promotion to `main`.
+        The issue is closed when the change is released to production.
