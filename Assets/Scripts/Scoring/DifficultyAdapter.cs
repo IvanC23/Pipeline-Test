@@ -72,7 +72,7 @@ namespace StarCollector.Scoring
             AccuracyThreshold = BaseAccuracyThreshold;
         }
 
-        // Keeps thresholds such as 0.7 exact after repeated additions of 0.1.
+        // Keeps thresholds such as 0.7 exact after repeated additoins of 0.1.
         private static double Round(double value) => Math.Round(value, 2);
     }
 }

@@ -1,0 +1,53 @@
+name: Issue promotion
+
+# Diary of the change: when a pull request to test or main is merged, the
+# issues it cites get a "promoted" comment. Same references as issue-links:
+# Refs/Fixes/Closes towards test, closing keywords towards main.
+on:
+  pull_request:
+    branches: [test, main]
+    types: [closed]
+
+permissions:
+  contents: read
+
+jobs:
+  promotion-comment:
+    # Closed without merge: nothing was promoted.
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: .github/scripts
+
+      - name: Comment the promotion on the cited issues
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          BASE_REF: ${{ github.base_ref }}
+          # Title and body are user input: read them from env, never inline.
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+        run: |
+          short="${MERGE_SHA:0:7}"
+          if [ "$BASE_REF" = "main" ]; then
+            # The link to the release is added when releases exist.
+            text="Promoted to production: #$PR_NUMBER merged into main as \`$short\`."
+          else
+            text="Promoted to test: #$PR_NUMBER merged into test as \`$short\`."
+          fi
+
+          echo "### Promotion to $BASE_REF" >> "$GITHUB_STEP_SUMMARY"
+          refs=$(bash .github/scripts/pr_issue_refs.sh)
+          while read -r n kind; do
+            case "$kind" in open|closed) ;; *) continue ;; esac
+            gh api "repos/$REPO/issues/$n/comments" -f body="$text" > /dev/null
+            echo "- #$n: commented" >> "$GITHUB_STEP_SUMMARY"
+          done <<< "$refs"
