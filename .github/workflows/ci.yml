@@ -309,9 +309,9 @@ jobs:
   # Evidence, not a check: lists every third-party component (actions,
   # tools, Unity Editor and packages, Docker image, binaries, dictionaries,
   # runner images) with its exact version, extracted from the files that
-  # decide it. Category, license, purpose and validation come from
-  # .github/third-party-metadata.json; a component without an entry there
-  # only gives a warning. Not a required check.
+  # decide it, and its license (read from the component when possible,
+  # otherwise from .github/third-party-licenses.json; an unknown license
+  # only gives a warning). Not a required check.
   # Waits for unity-tests only to read the Docker image it used; it then
   # runs in parallel with requirements-matrix and takes a few seconds.
   third-party-inventory:
@@ -327,11 +327,9 @@ jobs:
           name: unity-environment
           path: unity-environment
 
-      # GH_TOKEN only lets "gh --version" run without a login prompt.
       - name: Build the third-party inventory
         env:
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-          GH_TOKEN: ${{ github.token }}
         run: |
           python3 .github/scripts/third_party_inventory.py report \
             --unity-environment unity-environment \
