@@ -18,9 +18,13 @@ jobs:
   issue-links:
     runs-on: ubuntu-latest
     steps:
-      # Only the shared script is needed, not the project.
+      # Only the shared scripts are needed, not the project. The full commit
+      # graph without file contents (blob:none) lets the release list read
+      # the merges between main and test in a few seconds.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: 0
+          filter: blob:none
           sparse-checkout: .github/scripts
 
       - name: Check that the pull request references existing issues
@@ -77,3 +81,59 @@ jobs:
             echo "::error title=No valid issue reference::None of the references points to an existing issue."
             exit 1
           fi
+
+      # Release preparation (pull requests to main only). Informative: it lists
+      # the change issues promoted to test and not yet released, and warns about
+      # differences with the issues this pull request cites. It never fails the
+      # check: which changes are complete is decided by the team.
+      - name: List the change issues promoted since the last release
+        if: ${{ !cancelled() && github.base_ref == 'main' }}
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          promoted=$(bash .github/scripts/promoted_issues.sh)
+          # Issues closed by this pull request (closing keywords) and issues
+          # only cited (for example Refs #12: the change continues).
+          closing=$(BASE_REF=main bash .github/scripts/pr_issue_refs.sh | awk '{print $1}')
+          cited=$(BASE_REF=test bash .github/scripts/pr_issue_refs.sh | awk '{print $1}')
+
+          {
+            echo "### Change issues promoted to test since the last release"
+            if [ -z "$promoted" ]; then
+              echo "None found in the merges between main and test."
+            else
+              echo "| Issue | Pull request to test | Issue state | In this pull request |"
+              echo "|---|---|---|---|"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          while read -r n pr state; do
+            [ -n "$n" ] || continue
+            if grep -qx "$n" <<< "$closing"; then
+              status="closed by this pull request"
+            elif grep -qx "$n" <<< "$cited"; then
+              status="cited, stays open"
+            else
+              status="not cited"
+            fi
+            echo "| #$n | #$pr | $state | $status |" >> "$GITHUB_STEP_SUMMARY"
+          done <<< "$promoted"
+
+          # One warning per issue (an issue can come from more than one pull request).
+          promoted_issues=$(awk '{print $1}' <<< "$promoted" | sort -un)
+          for n in $promoted_issues; do
+            if ! grep -qx "$n" <<< "$cited"; then
+              echo "::warning title=Promoted issue not cited::#$n reached test but this pull request does not cite it. Add Closes #$n if the change is complete, or Refs #$n if it continues."
+            fi
+          done
+          for n in $closing; do
+            if ! grep -qx "$n" <<< "$promoted_issues"; then
+              echo "::warning title=Issue not promoted::#$n is closed by this pull request but no pull request merged into test since the last release cites it."
+            fi
+          done
