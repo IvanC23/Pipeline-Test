@@ -54,6 +54,36 @@ jobs:
           restore-keys: |
             Library-${{ env.TARGET_PLATFORM }}-
 
+      # The builder copies its own build script (assembly UnityBuilderAction)
+      # into Assets/Editor/Editor/UnityBuilderAction before starting Unity.
+      # Assets/Default.ruleset raises the critical Unity rules to error for
+      # every assembly, so a finding in that third-party script (UNT0007 in
+      # Builder.cs) would stop the build. A rule set next to the .asmdef of an
+      # assembly replaces Default.ruleset for that assembly only (Unity Manual,
+      # "Analyzer scope and diagnostics"): here the same rules stay visible as
+      # warnings. If GameCI moves its script, the rules apply again and the
+      # build fails visibly: update the folder below.
+      # The file is excluded from git so the working tree stays clean.
+      - name: Keep the project rules off the GameCI build script
+        run: |
+          dir=Assets/Editor/Editor/UnityBuilderAction
+          mkdir -p "$dir"
+          cat > "$dir/GameCIBuildScript.ruleset" <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <RuleSet Name="GameCI build script" Description="Third-party build script copied by game-ci/unity-builder: the critical rules of the project are reported as warnings." ToolsVersion="10.0">
+            <Rules AnalyzerId="Microsoft.Unity.Analyzers" RuleNamespace="Microsoft.Unity.Analyzers">
+              <Rule Id="UNT0006" Action="Warning" />
+              <Rule Id="UNT0033" Action="Warning" />
+              <Rule Id="UNT0007" Action="Warning" />
+              <Rule Id="UNT0008" Action="Warning" />
+              <Rule Id="UNT0023" Action="Warning" />
+              <Rule Id="UNT0029" Action="Warning" />
+            </Rules>
+          </RuleSet>
+          EOF
+          printf '%s\n' "/Assets/Editor/" >> .git/info/exclude
+          git status --porcelain
+
       # The editor version is read from ProjectSettings/ProjectVersion.txt.
       # versioning None: the builder keeps the version written in the project
       # (the default, Semantic, would compute one from the git tags).
