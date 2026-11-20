@@ -77,3 +77,122 @@ jobs:
             echo "::error title=No valid issue reference::None of the references points to an existing issue."
             exit 1
           fi
+
+  # Release preparation, pull requests to main only. Informative, not a
+  # required check: it lists the change issues promoted to test and not yet
+  # released, compares them with the issues this pull request cites, and keeps
+  # the result in one comment of the pull request, where the reviewer reads it
+  # before approving. Which changes are complete is decided by the team.
+  release-issues:
+    if: ${{ github.base_ref == 'main' }}
+    runs-on: ubuntu-latest
+    # Write access only for this job, to keep its comment on the pull request.
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: write
+    steps:
+      # Full commit graph without file contents (blob:none): enough to read the
+      # merges between main and test in a few seconds.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          filter: blob:none
+          sparse-checkout: .github/scripts
+
+      - name: List the change issues promoted since the last release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          # Title and body are user input: read them from env, never inline.
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          promoted=$(bash .github/scripts/promoted_issues.sh)
+          # Issues closed by this pull request (closing keywords, with their
+          # state) and issues only cited (for example Refs #12: the change continues).
+          closing_refs=$(BASE_REF=main bash .github/scripts/pr_issue_refs.sh)
+          closing=$(awk '{print $1}' <<< "$closing_refs")
+          cited=$(BASE_REF=test bash .github/scripts/pr_issue_refs.sh | awk '{print $1}')
+          promoted_issues=$(awk '{print $1}' <<< "$promoted" | sort -un)
+
+          # Differences to review, one line each (an issue can come from more
+          # than one pull request: one line per issue).
+          notes=()
+          for n in $promoted_issues; do
+            if ! grep -qx "$n" <<< "$cited"; then
+              notes+=("#$n reached test but is not cited: add \`Closes #$n\` if the change is complete, or \`Refs #$n\` if it continues.")
+              echo "::warning title=Promoted issue not cited::#$n reached test but this pull request does not cite it."
+            fi
+          done
+          for n in $closing; do
+            if ! grep -qx "$n" <<< "$promoted_issues"; then
+              notes+=("#$n is closed by this pull request but no pull request merged into test since the last release cites it.")
+              echo "::warning title=Issue not promoted::#$n is closed by this pull request but was not promoted since the last release."
+            fi
+          done
+          while read -r n kind; do
+            if [ "$kind" = "closed" ]; then
+              notes+=("#$n is already closed: this pull request will not close it.")
+            fi
+          done <<< "$closing_refs"
+
+          report="$RUNNER_TEMP/release-issues.md"
+          {
+            echo "<!-- release-issues -->"
+            if [ "${#notes[@]}" -eq 0 ]; then
+              echo "### ✅ Release check: every promoted change issue is cited"
+            else
+              echo "### ⚠️ Release check: ${#notes[@]} point(s) to review before approving"
+            fi
+            echo
+            echo "Change issues promoted to test since the last release (merges between \`main\` and \`test\` at \`${HEAD_SHA:0:7}\`):"
+            echo
+            if [ -z "$promoted" ]; then
+              echo "None found."
+            else
+              echo "| Issue | Pull request to test | Issue state | In this pull request |"
+              echo "|---|---|---|---|"
+              while read -r n pr state; do
+                if grep -qx "$n" <<< "$closing"; then
+                  status="closed by this pull request"
+                elif grep -qx "$n" <<< "$cited"; then
+                  status="cited, stays open"
+                else
+                  status="**not cited**"
+                fi
+                echo "| #$n | #$pr | $state | $status |"
+              done <<< "$promoted"
+            fi
+            if [ "${#notes[@]}" -gt 0 ]; then
+              echo
+              echo "**To review**"
+              for note in "${notes[@]}"; do echo "- $note"; done
+            fi
+            echo
+            echo "_Informative: it does not block the merge. Updated at every run ([last run]($RUN_URL))._"
+          } > "$report"
+          cat "$report" >> "$GITHUB_STEP_SUMMARY"
+
+      # One comment per pull request, updated in place: the hidden marker on
+      # its first line finds it again at the next run.
+      - name: Keep the result in a comment of the pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          report="$RUNNER_TEMP/release-issues.md"
+          id=$(gh api --paginate "repos/$REPO/issues/$PR_NUMBER/comments" \
+              --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | startswith("<!-- release-issues -->"))) | .id' \
+            | head -n 1)
+          if [ -n "$id" ]; then
+            gh api --method PATCH "repos/$REPO/issues/comments/$id" -F body=@"$report" > /dev/null
+            echo "Comment $id updated." >> "$GITHUB_STEP_SUMMARY"
+          else
+            gh api "repos/$REPO/issues/$PR_NUMBER/comments" -F body=@"$report" > /dev/null
+            echo "Comment created." >> "$GITHUB_STEP_SUMMARY"
+          fi
