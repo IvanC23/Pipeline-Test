@@ -18,6 +18,11 @@ jobs:
   issue-links:
     runs-on: ubuntu-latest
     steps:
+      # Only the shared script is needed, not the project.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: .github/scripts
+
       - name: Check that the pull request references existing issues
         env:
           GH_TOKEN: ${{ github.token }}
@@ -29,19 +34,16 @@ jobs:
         run: |
           if [ "$BASE_REF" = "main" ]; then
             # Promotion to production: the pull request must close the issues
-            # of the promoted changes. Only closing keywords in the description
-            # count, because GitHub ignores them in the pull request title.
-            refs=$(printf '%s\n' "$PR_BODY" \
-              | grep -oiE '\b(close[sd]?|fix(e[sd])?|resolve[sd]?):?[[:space:]]+#[0-9]+' \
-              | grep -oE '[0-9]+$' | sort -un || true)
+            # of the promoted changes (closing keywords in the description).
             missing_title="No closing reference"
             missing_hint="Close the issues of the promoted changes in the description (e.g. Closes #12). Refs alone does not close them."
           else
-            # Promotion to test: any reference in title or description counts.
-            refs=$(printf '%s\n%s\n' "$PR_TITLE" "$PR_BODY" | grep -oE '#[0-9]+' | tr -d '#' | sort -un || true)
             missing_title="No issue reference"
             missing_hint="List the issues of this change in the description (e.g. Refs #12, Fixes #12)."
           fi
+
+          # Which references count is decided in the shared script.
+          refs=$(bash .github/scripts/pr_issue_refs.sh)
 
           if [ -z "$refs" ]; then
             echo "::error title=$missing_title::$missing_hint"
@@ -51,15 +53,13 @@ jobs:
 
           valid=0
           echo "### Issues referenced by this pull request (base: $BASE_REF)" >> "$GITHUB_STEP_SUMMARY"
-          for n in $refs; do
-            # The issues endpoint also returns pull requests: keep real issues only.
-            kind=$(gh api "repos/$REPO/issues/$n" --jq 'if .pull_request then "pull request" else "issue " + .state end' 2>/dev/null || echo "missing")
+          while read -r n kind; do
             case "$kind" in
-              "issue open")
+              open)
                 valid=$((valid + 1))
                 echo "- #$n" >> "$GITHUB_STEP_SUMMARY"
                 ;;
-              "issue closed")
+              closed)
                 valid=$((valid + 1))
                 if [ "$BASE_REF" = "main" ]; then
                   echo "::warning title=Issue already closed::#$n is already closed: this pull request will not close it."
@@ -71,7 +71,7 @@ jobs:
                 echo "- #$n ignored: $kind" >> "$GITHUB_STEP_SUMMARY"
                 ;;
             esac
-          done
+          done <<< "$refs"
 
           if [ "$valid" -eq 0 ]; then
             echo "::error title=No valid issue reference::None of the references points to an existing issue."

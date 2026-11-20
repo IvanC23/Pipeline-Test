@@ -342,3 +342,69 @@ jobs:
           name: third-party-inventory
           path: third-party-inventory
           if-no-files-found: warn
+
+  # Diary of the change: comments the result of the required CI checks on the
+  # issues cited by a pull request to test, only when the result changes
+  # (first run of the pull request, failed -> passed, passed -> failed).
+  # A hidden marker in each comment records pull request and result.
+  # Not a required check; issue-links runs in its own workflow.
+  issue-diary:
+    needs: [smoke-check, spellcheck, requirement-ids, secret-scan, unity-tests, requirements-matrix]
+    # Also after a failure, which is what the comment reports. Not when the
+    # run is cancelled: a cancelled run has no result.
+    if: ${{ !cancelled() && github.event_name == 'pull_request' && github.base_ref == 'test' }}
+    runs-on: ubuntu-latest
+    # Write access to issues only for this job.
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: .github/scripts
+
+      - name: Comment the check result on the cited issues
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          BASE_REF: ${{ github.base_ref }}
+          # Title and body are user input: read them from env, never inline.
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          # Any required job that did not succeed (secret-scan is never
+          # skipped on pull requests).
+          failed=$(jq -r 'to_entries[] | select(.value.result != "success") | .key' <<< "$NEEDS" \
+            | paste -sd ',' - | sed 's/,/, /g')
+          short="${HEAD_SHA:0:7}"
+          if [ -z "$failed" ]; then
+            result="passed"
+            text="✅ CI checks passed on #$PR_NUMBER (development → test), commit \`$short\`. [Run]($RUN_URL)"
+          else
+            result="failed"
+            text="❌ CI checks failed on #$PR_NUMBER (development → test), commit \`$short\`: $failed. [Run]($RUN_URL)"
+          fi
+          marker="<!-- issue-diary pr=$PR_NUMBER result=$result -->"
+
+          echo "### Issue diary: CI checks $result" >> "$GITHUB_STEP_SUMMARY"
+          refs=$(bash .github/scripts/pr_issue_refs.sh)
+          while read -r n kind; do
+            case "$kind" in open|closed) ;; *) continue ;; esac
+            # Last result recorded for this pull request on this issue.
+            last=$(gh api --paginate "repos/$REPO/issues/$n/comments" \
+                --jq '.[] | select(.user.login == "github-actions[bot]") | .body' \
+              | grep -oE "<!-- issue-diary pr=$PR_NUMBER result=[a-z]+ -->" \
+              | tail -n 1 | sed -E 's/.*result=([a-z]+).*/\1/' || true)
+            if [ "$last" = "$result" ]; then
+              echo "- #$n: still $result, no comment" >> "$GITHUB_STEP_SUMMARY"
+              continue
+            fi
+            gh api "repos/$REPO/issues/$n/comments" \
+              -f body="$(printf '%s\n%s' "$text" "$marker")" > /dev/null
+            echo "- #$n: commented ($result)" >> "$GITHUB_STEP_SUMMARY"
+          done <<< "$refs"
