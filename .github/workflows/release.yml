@@ -1,0 +1,158 @@
+name: Release
+
+on:
+  # Every promotion is a merge into main: a push to main.
+  push:
+    branches: [main]
+  # Manual retry from the Actions tab (branch main), e.g. when the release
+  # failed after the merge. Safe to repeat: see "Decide what to publish".
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One release at a time, never cancelled halfway.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    # Only on main, also when started by hand from another branch.
+    if: ${{ github.ref == 'refs/heads/main' }}
+    permissions:
+      # Creates the tag and the GitHub Release.
+      contents: write
+      # Downloads the build of another workflow run (Build).
+      actions: read
+    steps:
+      # Depth 2: the merge commit and its two parents.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2
+
+      # The release publishes the build that was tested, not a new one. That
+      # is only correct when the files of main are exactly the files of the
+      # tested commit: the second parent of the merge commit (the head of the
+      # pull request, test or a hotfix branch). If they differ (e.g. a hotfix
+      # in main not yet merged back into test), this combination was never
+      # built nor tested: stop.
+      - name: Find the tested commit
+        id: tested
+        run: |
+          if ! tested=$(git rev-parse --verify --quiet HEAD^2); then
+            echo "::error title=Not a promotion::${GITHUB_SHA::7} is not the merge commit of a pull request: nothing to release."
+            exit 1
+          fi
+          if ! git diff --quiet "$tested" HEAD; then
+            echo "::error title=Untested files::The files of main differ from the tested commit ${tested::7}. Merge the missing changes (e.g. a hotfix) into test, test again and promote again."
+            git diff --stat "$tested" HEAD
+            exit 1
+          fi
+          echo "sha=$tested" >> "$GITHUB_OUTPUT"
+          echo "Tested commit: \`$tested\` (same files as main \`${GITHUB_SHA::7}\`)." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Read the version
+        id: version
+        run: bash .github/scripts/version_check.sh read
+
+      # Repeating the workflow must not change a published release:
+      # - tag missing: new release; the version must be higher than the latest
+      #   release (same check as release-version on the pull request);
+      # - tag on this commit, release missing: finish the interrupted release;
+      # - tag on this commit, release present: nothing to do;
+      # - tag on another commit: error, a tag is never moved.
+      - name: Decide what to publish
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          tag="v$VERSION"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          tagged=$(git ls-remote --tags --refs origin "refs/tags/$tag" | cut -f 1)
+          if [ -z "$tagged" ]; then
+            bash .github/scripts/version_check.sh error
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          elif [ "$tagged" != "$GITHUB_SHA" ]; then
+            echo "::error title=Tag already used::$tag already points to ${tagged::7}, not to ${GITHUB_SHA::7}. A release tag is never moved: raise the version and promote again."
+            exit 1
+          elif gh release view "$tag" > /dev/null 2>&1; then
+            echo "Release $tag already published for ${GITHUB_SHA::7}: nothing to do." >> "$GITHUB_STEP_SUMMARY"
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Tag $tag exists on ${GITHUB_SHA::7} without a release: publishing it." >> "$GITHUB_STEP_SUMMARY"
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # The package of the Build run of the tested commit, checked again: the
+      # commit in build-info.json and the hash of every file.
+      - name: Download the tested build
+        id: build
+        if: ${{ steps.plan.outputs.publish == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TESTED: ${{ steps.tested.outputs.sha }}
+        run: |
+          run_id=$(gh run list --workflow build.yml --commit "$TESTED" --status success \
+            --limit 1 --json databaseId --jq '.[0].databaseId // empty')
+          if [ -z "$run_id" ]; then
+            echo "::error title=No tested build::No successful Build for ${TESTED::7} (missing, failed or artifact expired). Run Build on that commit, then re-run this workflow."
+            exit 1
+          fi
+          gh run download "$run_id" --dir "$RUNNER_TEMP/download"
+          info=$(find "$RUNNER_TEMP/download" -name build-info.json | head -n 1)
+          if [ -z "$info" ]; then
+            echo "::error title=Package not found::The Build run $run_id has no package with build-info.json."
+            exit 1
+          fi
+          package=$(dirname "$info")
+          if [ "$(jq -r .commit "$info")" != "$TESTED" ]; then
+            echo "::error title=Wrong build::build-info.json of run $run_id is not for ${TESTED::7}."
+            exit 1
+          fi
+          (cd "$package/player" && sha256sum --quiet --check ../SHA256SUMS.txt)
+          echo "dir=$package" >> "$GITHUB_OUTPUT"
+          echo "run=$run_id" >> "$GITHUB_OUTPUT"
+          echo "name=StarCollector-$(jq -r .build "$info")-$(jq -r .platform "$info")" >> "$GITHUB_OUTPUT"
+
+      # Tag and release in one call: gh creates the tag on the merge commit.
+      # The notes start with the build information; GitHub appends the list
+      # of pull requests since the previous release.
+      - name: Publish the release
+        if: ${{ steps.plan.outputs.publish == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.plan.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
+          TESTED: ${{ steps.tested.outputs.sha }}
+          PACKAGE_DIR: ${{ steps.build.outputs.dir }}
+          PACKAGE_NAME: ${{ steps.build.outputs.name }}
+          BUILD_RUN: ${{ steps.build.outputs.run }}
+          SERVER: ${{ github.server_url }}/${{ github.repository }}
+        run: |
+          assets="$RUNNER_TEMP/assets"
+          mkdir -p "$assets"
+          (cd "$PACKAGE_DIR" && zip -q -r "$assets/$PACKAGE_NAME.zip" .)
+          cp "$PACKAGE_DIR/build-info.json" "$PACKAGE_DIR/SHA256SUMS.txt" "$assets/"
+          (cd "$assets" && sha256sum "$PACKAGE_NAME.zip" > "$PACKAGE_NAME.zip.sha256")
+          notes=$(cat <<EOF
+          Star Collector $VERSION
+
+          - Release commit: \`$GITHUB_SHA\` (main)
+          - Tested commit: \`$TESTED\`, same files
+          - Build: the package tested by hand, from [Build run $BUILD_RUN]($SERVER/actions/runs/$BUILD_RUN)
+          - Files: \`$PACKAGE_NAME.zip\` (player, build-info.json, SHA256SUMS.txt), its SHA-256, SHA256SUMS.txt and build-info.json
+          - Rollback: install the previous release; a fix is a new version
+          EOF
+          )
+          gh release create "$TAG" --target "$GITHUB_SHA" --title "Star Collector $VERSION" \
+            --notes "$notes" --generate-notes \
+            "$assets/$PACKAGE_NAME.zip" "$assets/$PACKAGE_NAME.zip.sha256" \
+            "$assets/SHA256SUMS.txt" "$assets/build-info.json"
+          {
+            echo "### Release $TAG"
+            echo "- Release: $SERVER/releases/tag/$TAG"
+            echo "- Package: \`$PACKAGE_NAME.zip\` (SHA-256 \`$(cut -d ' ' -f 1 "$assets/$PACKAGE_NAME.zip.sha256")\`)"
+          } >> "$GITHUB_STEP_SUMMARY"
