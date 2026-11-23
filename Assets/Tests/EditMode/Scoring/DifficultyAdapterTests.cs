@@ -18,7 +18,6 @@ namespace StarCollector.Tests.EditMode.Scoring
         public void NewAdapter_StartsAtBaseValues()
         {
             AssertValues(DifficultyAdapter.BaseTargetDistance, DifficultyAdapter.BaseAccuracyThreshold);
-            Assert.That(1, Is.EqualTo(2), "Deliberate failure to check the test summary");
         }
 
         [Test]
