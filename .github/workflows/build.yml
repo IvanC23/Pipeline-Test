@@ -20,6 +20,10 @@ env:
   BUILD_NAME: StarCollector
 
 jobs:
+  # Required check of the ruleset of main: keep the job name. Its result is
+  # recorded on the built commit, which is the head of the pull request to
+  # main (the tip of test, or of a hotfix branch built by hand), so that pull
+  # request cannot merge before this build is green.
   player-build:
     runs-on: ubuntu-latest
     # Same group as unity-tests in ci.yml: one Unity license activation at a
