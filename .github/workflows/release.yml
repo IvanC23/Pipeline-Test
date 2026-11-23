@@ -24,13 +24,20 @@ jobs:
     permissions:
       # Creates the tag and the GitHub Release.
       contents: write
-      # Downloads the build of another workflow run (Build).
+      # Downloads the build of another workflow run (Build) and the
+      # artifacts of the CI run of the promotion (evidence package).
       actions: read
+      # Evidence package: promotion pull request, reviews and issues.
+      pull-requests: read
+      issues: read
     steps:
-      # Depth 2: the merge commit and its two parents.
+      # Full history, without file contents of old commits: the evidence
+      # package lists the pull requests merged into test since the previous
+      # release (git log main..test).
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 2
+          fetch-depth: 0
+          filter: blob:none
 
       # The release publishes the build that was tested, not a new one. That
       # is only correct when the files of main are exactly the files of the
@@ -117,6 +124,27 @@ jobs:
           echo "run=$run_id" >> "$GITHUB_OUTPUT"
           echo "name=StarCollector-$(jq -r .build "$info")-$(jq -r .platform "$info")" >> "$GITHUB_OUTPUT"
 
+      # Evidence package (zip): test reports, requirements matrix, inventory,
+      # build information, promotion pull request with its reviews, promoted
+      # pull requests and issues. Kept with the release because Actions logs
+      # and artifacts expire. Collected before publishing: when something is
+      # missing nothing is published, and the workflow can be re-run.
+      - name: Collect the evidence
+        id: evidence
+        if: ${{ steps.plan.outputs.publish == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SERVER: ${{ github.server_url }}/${{ github.repository }}
+          RELEASE_SHA: ${{ github.sha }}
+          TESTED: ${{ steps.tested.outputs.sha }}
+          VERSION: ${{ steps.version.outputs.version }}
+          TAG: ${{ steps.plan.outputs.tag }}
+          BUILD_RUN: ${{ steps.build.outputs.run }}
+          PACKAGE_DIR: ${{ steps.build.outputs.dir }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: OUTPUT_DIR="$RUNNER_TEMP/evidence" bash .github/scripts/evidence_package.sh
+
       # Tag and release in one call: gh creates the tag on the merge commit.
       # The notes start with the build information; GitHub appends the list
       # of pull requests since the previous release.
@@ -130,13 +158,16 @@ jobs:
           PACKAGE_DIR: ${{ steps.build.outputs.dir }}
           PACKAGE_NAME: ${{ steps.build.outputs.name }}
           BUILD_RUN: ${{ steps.build.outputs.run }}
+          EVIDENCE: ${{ steps.evidence.outputs.path }}
           SERVER: ${{ github.server_url }}/${{ github.repository }}
         run: |
           assets="$RUNNER_TEMP/assets"
           mkdir -p "$assets"
           (cd "$PACKAGE_DIR" && zip -q -r "$assets/$PACKAGE_NAME.zip" .)
-          cp "$PACKAGE_DIR/build-info.json" "$PACKAGE_DIR/SHA256SUMS.txt" "$assets/"
-          (cd "$assets" && sha256sum "$PACKAGE_NAME.zip" > "$PACKAGE_NAME.zip.sha256")
+          cp "$PACKAGE_DIR/build-info.json" "$PACKAGE_DIR/SHA256SUMS.txt" "$EVIDENCE" "$assets/"
+          evidence_name=$(basename "$EVIDENCE")
+          (cd "$assets" && sha256sum "$PACKAGE_NAME.zip" > "$PACKAGE_NAME.zip.sha256" \
+            && sha256sum "$evidence_name" > "$evidence_name.sha256")
           notes=$(cat <<EOF
           Star Collector $VERSION
 
@@ -144,15 +175,18 @@ jobs:
           - Tested commit: \`$TESTED\`, same files
           - Build: the package tested by hand, from [Build run $BUILD_RUN]($SERVER/actions/runs/$BUILD_RUN)
           - Files: \`$PACKAGE_NAME.zip\` (player, build-info.json, SHA256SUMS.txt), its SHA-256, SHA256SUMS.txt and build-info.json
+          - Evidence: \`$evidence_name\` (test reports, requirements matrix, inventory, approvals, pull requests and issues; start from README.md) and its SHA-256
           - Rollback: install the previous release; a fix is a new version
           EOF
           )
           gh release create "$TAG" --target "$GITHUB_SHA" --title "Star Collector $VERSION" \
             --notes "$notes" --generate-notes \
             "$assets/$PACKAGE_NAME.zip" "$assets/$PACKAGE_NAME.zip.sha256" \
-            "$assets/SHA256SUMS.txt" "$assets/build-info.json"
+            "$assets/SHA256SUMS.txt" "$assets/build-info.json" \
+            "$assets/$evidence_name" "$assets/$evidence_name.sha256"
           {
             echo "### Release $TAG"
             echo "- Release: $SERVER/releases/tag/$TAG"
             echo "- Package: \`$PACKAGE_NAME.zip\` (SHA-256 \`$(cut -d ' ' -f 1 "$assets/$PACKAGE_NAME.zip.sha256")\`)"
+            echo "- Evidence: \`$evidence_name\` (SHA-256 \`$(cut -d ' ' -f 1 "$assets/$evidence_name.sha256")\`)"
           } >> "$GITHUB_STEP_SUMMARY"
