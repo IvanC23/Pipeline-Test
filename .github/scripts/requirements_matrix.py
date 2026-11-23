@@ -19,6 +19,12 @@ one line, shortened to MAX_REASON_LENGTH), but does not fail this script: the
 unity-tests job already fails on it.
 Requirement ids that are not in the catalog are reported as warnings.
 
+The Markdown starts with a test summary: version of the project, commit,
+pass/fail counts and the failed tests with their reason. When there is no
+XML report, the summary lists the compiler errors found in the editor logs
+of the results folder (also as annotations on the files), so the reason is
+readable without downloading the logs.
+
 Only the Python standard library is used.
 """
 
@@ -26,9 +32,16 @@ import argparse
 import csv
 import json
 import os
+import re
 import sys
 import xml.etree.ElementTree as ElementTree
 from pathlib import Path
+
+# Compiler message in the Unity editor log, e.g.
+# Assets/Scripts/Game.cs(12,5): error CS1002: ; expected
+COMPILER_ERROR_RE = re.compile(r"^(?P<file>[^\s(][^(]*)\((?P<line>\d+),(?P<column>\d+)\): error (?P<code>\w+): (?P<message>.*)$")
+# Most compiler errors listed in the summary; the full list is in the log.
+MAX_COMPILER_ERRORS = 50
 
 REQUIREMENT_PROPERTY = "Requirement"
 
@@ -41,8 +54,13 @@ NOT_COVERED = "Not covered"
 MAX_REASON_LENGTH = 200
 
 
+def escape_command(text):
+    """Escapes a value for a GitHub workflow command (::error ...)."""
+    return text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+
+
 def error(message):
-    print(f"::error::{message}")
+    print(f"::error::{escape_command(message)}")
 
 
 def warning(message):
@@ -116,6 +134,78 @@ def read_reports(results_dir):
     return reports, tests
 
 
+def read_version(project_settings):
+    """Version written in the project (Player > Version), or 'unknown'."""
+    try:
+        text = Path(project_settings).read_text(encoding="utf-8")
+    except OSError:
+        return "unknown"
+    match = re.search(r"^  bundleVersion: *(\S+)\s*$", text, re.MULTILINE)
+    return match.group(1) if match else "unknown"
+
+
+def read_compiler_errors(results_dir):
+    """Distinct compiler errors in the editor logs, in order of appearance.
+
+    Unity prints each error more than once (per assembly and in the final
+    list): duplicates are removed.
+    """
+    logs = sorted(Path(results_dir).rglob("*.log")) if Path(results_dir).is_dir() else []
+    errors = []
+    seen = set()
+    for log in logs:
+        for raw_line in log.read_text(encoding="utf-8", errors="replace").splitlines():
+            match = COMPILER_ERROR_RE.match(raw_line.strip())
+            if not match:
+                continue
+            key = match.group("file", "line", "column", "code")
+            if key in seen:
+                continue
+            seen.add(key)
+            errors.append(match.groupdict())
+    return logs, errors
+
+
+def count_results(tests):
+    counts = {PASSED: 0, FAILED: 0}
+    other = 0
+    for test in tests:
+        if test["result"] in counts:
+            counts[test["result"]] += 1
+        else:
+            other += 1
+    return counts[PASSED], counts[FAILED], other
+
+
+def summary_header(version, commit):
+    return ["# Test summary", "", f"- Version: {version}", f"- Commit: {commit}"]
+
+
+def write_no_report_summary(output_dir, version, commit, logs, compiler_errors):
+    """Summary when the tests did not run: the compiler errors, if any."""
+    lines = summary_header(version, commit)
+    lines += ["- Result: ❌ no test report: the tests did not run", ""]
+    if compiler_errors:
+        lines += [f"## Compiler errors ({len(compiler_errors)})", ""]
+        for item in compiler_errors[:MAX_COMPILER_ERRORS]:
+            lines.append(
+                f"- `{item['file']}({item['line']},{item['column']})` "
+                f"{item['code']}: {markdown_cell(item['message'])}"
+            )
+        if len(compiler_errors) > MAX_COMPILER_ERRORS:
+            lines.append(f"- … {len(compiler_errors) - MAX_COMPILER_ERRORS} more in the editor log.")
+    elif logs:
+        lines.append("No compiler errors found in the editor logs: read the logs in the "
+                     "`unity-test-results` artifact (license, Docker or startup problem).")
+    else:
+        lines.append("No editor log found: the test job stopped before starting Unity.")
+    lines.append("")
+    markdown = "\n".join(lines)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    (output_dir / "requirements-matrix.md").write_text(markdown, encoding="utf-8")
+    return markdown
+
+
 def requirement_status(results):
     if not results:
         return NOT_COVERED
@@ -137,7 +227,7 @@ def test_line(test):
     return line
 
 
-def write_outputs(output_dir, header, rows, unlinked, unknown):
+def write_outputs(output_dir, summary, header, rows, unlinked, unknown):
     output_dir.mkdir(parents=True, exist_ok=True)
 
     with open(output_dir / "requirements-matrix.csv", "w", newline="", encoding="utf-8") as file:
@@ -152,7 +242,7 @@ def write_outputs(output_dir, header, rows, unlinked, unknown):
                     test["name"], test["result"], test["reason"],
                 ])
 
-    lines = ["# Requirements matrix", ""]
+    lines = summary + ["# Requirements matrix", ""]
     lines += [f"- {label}: {value}" for label, value in header]
     lines += ["", "| Requirement | Status | Tests | Title |", "|---|---|---|---|"]
     for requirement, status, tests in rows:
@@ -185,7 +275,13 @@ def main():
     parser.add_argument("--requirements", required=True, help="Requirements catalog (JSON).")
     parser.add_argument("--results", required=True, help="Folder with the NUnit XML reports.")
     parser.add_argument("--output", required=True, help="Folder for the matrix files.")
+    parser.add_argument("--project-settings", default="ProjectSettings/ProjectSettings.asset",
+                        help="Unity project settings, for the version.")
     args = parser.parse_args()
+
+    version = read_version(args.project_settings)
+    commit = os.environ.get("HEAD_SHA") or os.environ.get("GITHUB_SHA") or "local"
+    step_summary = os.environ.get("GITHUB_STEP_SUMMARY")
 
     try:
         requirements = load_requirements(args.requirements)
@@ -195,7 +291,18 @@ def main():
         return 1
 
     if not reports:
-        error(f"No XML test report found in '{args.results}': the tests did not run (compile error or failed setup).")
+        logs, compiler_errors = read_compiler_errors(args.results)
+        markdown = write_no_report_summary(Path(args.output), version, commit, logs, compiler_errors)
+        if step_summary:
+            with open(step_summary, "a", encoding="utf-8") as file:
+                file.write(markdown + "\n")
+        for item in compiler_errors[:MAX_COMPILER_ERRORS]:
+            print(
+                f"::error file={escape_command(item['file'])},line={item['line']},col={item['column']},"
+                f"title={item['code']}::{escape_command(item['message'])}"
+            )
+        error(f"No XML test report found in '{args.results}': the tests did not run "
+              f"({len(compiler_errors)} compiler error(s) in the editor logs).")
         return 1
     if not tests:
         error("The XML test reports contain no tests.")
@@ -210,17 +317,31 @@ def main():
     unlinked = [test for test in tests if not test["requirements"]]
     unknown = {requirement_id for test in tests for requirement_id in test["requirements"]} - known_ids
 
+    passed, failed, other = count_results(tests)
+    outcome = f"❌ {failed} test(s) failed" if failed else "✅ all tests passed"
+    if not failed and other:
+        outcome = f"⚠️ {other} test(s) did not run"
+    summary = summary_header(version, commit) + [
+        f"- Result: {outcome} – {passed} passed, {failed} failed, {other} skipped or inconclusive "
+        f"({len(tests)} tests)",
+        "",
+    ]
+    failed_tests = [test for test in tests if test["result"] == FAILED]
+    if failed_tests:
+        summary += [f"## Failed tests ({len(failed_tests)})", ""]
+        summary += [test_line(test) for test in failed_tests]
+        summary.append("")
+
+    # Version and commit are already in the test summary above.
     header = [
-        ("Commit", os.environ.get("HEAD_SHA") or os.environ.get("GITHUB_SHA") or "local"),
         ("Reports", ", ".join(report.relative_to(args.results).as_posix() for report in reports)),
         ("Tests", str(len(tests))),
         ("Requirements", str(len(requirements))),
     ]
-    markdown = write_outputs(Path(args.output), header, rows, unlinked, unknown)
+    markdown = write_outputs(Path(args.output), summary, header, rows, unlinked, unknown)
 
-    summary = os.environ.get("GITHUB_STEP_SUMMARY")
-    if summary:
-        with open(summary, "a", encoding="utf-8") as file:
+    if step_summary:
+        with open(step_summary, "a", encoding="utf-8") as file:
             file.write(markdown + "\n")
 
     for requirement_id in sorted(unknown):
