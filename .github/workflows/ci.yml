@@ -1,14 +1,22 @@
 name: CI
 
 on:
-  # Direct pushes to development: informative, non-blocking checks.
+  # Direct pushes to development: only the fast checks that need neither
+  # Unity nor its license (static checks and the secret scan of the pushed
+  # commits), so development is not slowed down. Informative: nothing is
+  # blocked by a push. The Unity jobs are skipped (see their "if").
   push:
     branches: [development]
-  # Pull requests towards test and main: required checks on both promotions.
-  # Job names are the names of the required checks in the rulesets:
-  # keep them stable.
+  # Pull requests towards test and main: every check, required on both
+  # promotions. Job names are the names of the required checks in the
+  # rulesets: keep them stable.
   pull_request:
     branches: [test, main]
+  # Manual full run from the Actions tab (Run workflow, any branch), e.g. to
+  # check compilation and tests on development before opening a pull
+  # request. Everything runs except the secret scan, which has no "new
+  # commits" to scan. The button appears once this file is on main.
+  workflow_dispatch:
 
 # Least privilege by default: jobs can only read the repository.
 permissions:
@@ -39,6 +47,8 @@ jobs:
         run: |
           if [ "$EVENT_NAME" = "pull_request" ]; then
             echo "Pull request from $HEAD_REF to $BASE_REF"
+          elif [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            echo "Manual run on $REF_NAME"
           else
             echo "Push to $REF_NAME"
           fi
@@ -76,19 +86,25 @@ jobs:
           --requirements Requirements/requirements.json
           --sources Assets
 
-  # Blocking: fails when a commit of the pull request adds a secret
-  # (token, API key, password). Required check in the test and main rulesets:
-  # keep the job name.
-  # Only the changes of the pull request are scanned (the patches of the
-  # commits between the base and the head of the pull request), never the
-  # whole history: the time depends on the size of the change, not of the
-  # project. A secret added and removed inside the same pull request is still
-  # found, because every commit is scanned, not only the final result.
+  # Blocking on pull requests: fails when a commit of the pull request adds a
+  # secret (token, API key, password). Required check in the test and main
+  # rulesets: keep the job name.
+  # Also on pushes to development, on the pushed commits only: in a private
+  # repository a secret found right after the push can be revoked before it
+  # spreads to test, builds and other clones. There it does not block
+  # anything (the push has already happened): a red run is the alert.
+  # Only the new changes are scanned (the patches of the commits between the
+  # base and the head of the pull request, or between the previous and the
+  # new head of the pushed branch), never the whole history: the time depends
+  # on the size of the change, not of the project. A secret added and removed
+  # inside the same pull request is still found, because every commit is
+  # scanned, not only the final result.
   # The official gitleaks binary is used instead of gitleaks-action: the
   # action needs a license key on organization repositories, the binary
   # (MIT) behaves the same on personal and organization repositories.
   secret-scan:
-    if: github.event_name == 'pull_request'
+    # A manual run has no new commits to scan.
+    if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
     env:
       # To update: take the new version from the gitleaks releases page and
@@ -118,21 +134,35 @@ jobs:
           tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP" gitleaks
           "$RUNNER_TEMP/gitleaks" version
 
-      # base..head = the commits of the pull request only.
+      # Pull request: base..head = the commits of the pull request only.
+      # Push: before..after = the commits of the push only. A push that
+      # creates the branch has no previous head (all zeros): only the pushed
+      # commit is scanned.
       # --redact: the secret is never printed in the log or in the report.
       # --ignore-gitleaks-allow: an inline "gitleaks:allow" comment cannot
       # silence a finding; accepted false positives go in .gitleaksignore,
       # a file reviewed in the pull request like any other change.
-      - name: Scan the pull request commits
+      - name: Scan the new commits
         env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE_SHA: ${{ github.event.before }}
+          PUSH_HEAD_SHA: ${{ github.sha }}
         run: |
-          echo "Scanning commits ${BASE_SHA}..${HEAD_SHA}"
-          git log --oneline "${BASE_SHA}..${HEAD_SHA}"
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            range="${PR_BASE_SHA}..${PR_HEAD_SHA}"
+          elif [ -z "${PUSH_BEFORE_SHA//0/}" ]; then
+            range="-1 ${PUSH_HEAD_SHA}"
+          else
+            range="${PUSH_BEFORE_SHA}..${PUSH_HEAD_SHA}"
+          fi
+          echo "Scanning commits: ${range}"
+          # $range is split on purpose: "-1 <sha>" is two git log arguments.
+          git log --oneline $range
           "$RUNNER_TEMP/gitleaks" git \
             --no-banner --verbose --redact --ignore-gitleaks-allow \
-            --log-opts="${BASE_SHA}..${HEAD_SHA}" \
+            --log-opts="${range}" \
             --report-format sarif --report-path gitleaks-report.sarif \
             .
 
@@ -167,7 +197,12 @@ jobs:
   # batch mode and compiles every assembly before running the tests, so a
   # compile error fails this job. The player build comes later, with the
   # versioned build artifact.
+  # Not on pushes to development: the slow Unity jobs (this one and the two
+  # that read its results) run on pull requests and on manual runs only.
+  # Static analysis with the Roslyn analyzers also runs here, inside the
+  # Unity compilation, so it moves to pull requests too.
   unity-tests:
+    if: github.event_name != 'push'
     # Pinned runner: the image the editor runs in is fixed by the Unity
     # version, the host is fixed here, so results do not change when
     # ubuntu-latest moves to a new release. A new Ubuntu release is adopted
@@ -175,8 +210,8 @@ jobs:
     runs-on: ubuntu-24.04
     # Every run activates the Unity license at the start and returns it at the
     # end. One run at a time across the repository keeps the activations
-    # within the seats of the license (a push to development and the PR it
-    # updates would otherwise activate twice at once).
+    # within the seats of the license (a manual run and a pull request, or
+    # two pull requests, would otherwise activate twice at once).
     concurrency:
       group: unity-license
       cancel-in-progress: false
@@ -267,12 +302,14 @@ jobs:
   # when its tests did not run, or when there is no report at all. A failed
   # test is shown in the matrix; unity-tests already fails on it.
   # A separate job, so it can be re-run alone without starting Unity again.
-  # Not a required check yet.
+  # Required check in the test and main rulesets: keep the job name.
   requirements-matrix:
     needs: unity-tests
     # Also after a failure of unity-tests: the matrix shows what failed, or
-    # reports the missing XML. Not when the run is cancelled.
-    if: ${{ !cancelled() }}
+    # reports the missing XML. Not when the run is cancelled. Not on pushes:
+    # unity-tests is skipped there, and !cancelled() alone would still start
+    # this job, which would then fail for the missing report.
+    if: ${{ !cancelled() && github.event_name != 'push' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -316,7 +353,8 @@ jobs:
   # runs in parallel with requirements-matrix and takes a few seconds.
   third-party-inventory:
     needs: unity-tests
-    if: ${{ !cancelled() }}
+    # Not on pushes, like requirements-matrix.
+    if: ${{ !cancelled() && github.event_name != 'push' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
