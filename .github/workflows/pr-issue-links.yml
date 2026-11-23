@@ -80,8 +80,14 @@ jobs:
 
   # Version of the release. Pull requests to main: required check (ruleset of
   # main). The version written in the project must be higher than the latest
-  # release tag, and the commit of the pull request must have a successful
-  # Build: the release publishes that build, the one tested by hand.
+  # release tag.
+  # The successful Build of the commit, which the release publishes, is not
+  # looked up here: player-build (workflow Build, on the push to test or run
+  # by hand on a hotfix branch) is itself a required check of the ruleset of
+  # main. It reports on the same commit as the pull request, so the pull
+  # request waits for the build and turns green on its own when the build
+  # ends, without re-running anything. A job here would run before the
+  # build ends and fail, and needs cannot wait for a job of another workflow.
   # Pull requests to test: the same version comparison as a warning only, so
   # a version equal to a release (e.g. after a hotfix merged back) is seen
   # early; the check stays green there.
@@ -91,8 +97,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      # Reads the Build runs of the commit.
-      actions: read
     steps:
       # The commit of the pull request (not the temporary merge commit), only
       # the shared scripts and the project settings.
@@ -112,32 +116,6 @@ jobs:
           else
             bash .github/scripts/version_check.sh warning
           fi
-
-      # The release reuses the build of this commit: it must exist and be
-      # green before the merge, not after it.
-      - name: Check that the commit has a successful build
-        if: ${{ github.base_ref == 'main' }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          HEAD_REF: ${{ github.head_ref }}
-        run: |
-          runs=$(gh run list --repo "$REPO" --workflow build.yml --commit "$HEAD_SHA" \
-            --limit 20 --json databaseId,status,conclusion,url)
-          success=$(jq -r '[.[] | select(.conclusion == "success")][0].url // empty' <<< "$runs")
-          running=$(jq -r '[.[] | select(.status != "completed")] | length' <<< "$runs")
-          if [ -n "$success" ]; then
-            echo "✅ Tested build of \`${HEAD_SHA:0:7}\`: $success" >> "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
-          if [ "$running" -gt 0 ]; then
-            echo "::error title=Build still running::The Build of ${HEAD_SHA:0:7} has not finished yet: re-run this check when it is green."
-          else
-            echo "::error title=No tested build::No successful Build for ${HEAD_SHA:0:7}. Run Build on branch $HEAD_REF (Actions > Build > Run workflow), test it, then re-run this check."
-          fi
-          echo "❌ No successful Build for \`${HEAD_SHA:0:7}\`." >> "$GITHUB_STEP_SUMMARY"
-          exit 1
 
   # Release preparation, pull requests to main only. Informative, not a
   # required check: it lists the change issues promoted to test and not yet
